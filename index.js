@@ -1,22 +1,25 @@
 let counter = 0
 
-const providers = [
-    'rpc1',
-    'rpc2',
-]
-
-function getNextProviderIndex () {
-    return counter % providers.length
+const providers = {
+    polygon: [
+        'https://polygon-rpc.com/rpc',
+        'https://rpc.ankr.com/polygon',
+    ]
 }
 
-function getProvider () {
-    const nextProviderIndex = getNextProviderIndex()
+function getNextProviderIndex (network) {
+    counter++
+    return counter % providers[network].length
+}
+
+function getProviderUrl (network) {
+    const nextProviderIndex = getNextProviderIndex(network)
 
     console.log(`provider counter: ${counter}`)
     console.log(`provider index: ${nextProviderIndex}`)
-    console.log(`provider url: ${providers[nextProviderIndex]}`)
+    console.log(`provider url: ${providers[network][nextProviderIndex]}`)
 
-    counter++
+    return providers[network][nextProviderIndex]
 }
 
-module.exports = { getProvider }
+module.exports = { getProviderUrl }
