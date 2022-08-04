@@ -1,6 +1,7 @@
 const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
 
 let counter = 0
+const byNetwork = {}
 
 const providers = {
     polygon: [
@@ -9,13 +10,12 @@ const providers = {
     ]
 }
 
-function getNextProviderIndex (network) {
-    counter++
+function getCurrentProviderIndex (network) {
     return counter % providers[network].length
 }
 
 function getProviderUrl (network) {
-    const nextProviderIndex = getNextProviderIndex(network)
+    const nextProviderIndex = getCurrentProviderIndex(network)
 
     console.log(`provider counter: ${counter}`)
     console.log(`provider index: ${nextProviderIndex}`)
@@ -26,6 +26,14 @@ function getProviderUrl (network) {
 
 function getProvider (networkName, chainId) {
     if (networkName !== 'polygon') return null;
+
+    // move the counter
+    counter++
+    const currentIndex = getCurrentProviderIndex(networkName);
+    if (byNetwork[networkName] && byNetwork[networkName][currentIndex]) {
+        console.log(currentIndex)
+        return byNetwork[networkName][currentIndex]
+    }
 
     const url = getProviderUrl(networkName)
 	const provider = url.startsWith('wss:')
@@ -44,6 +52,8 @@ function getProvider (networkName, chainId) {
 		})
 	}
 
+    if (! byNetwork[networkName]) byNetwork[networkName] = {}
+    byNetwork[networkName][currentIndex] = provider;
 	return provider
 }
 
