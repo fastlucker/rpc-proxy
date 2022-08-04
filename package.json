@@ -19,5 +19,8 @@
   "bugs": {
     "url": "https://github.com/AmbireTech/custom-rpc/issues"
   },
-  "homepage": "https://github.com/AmbireTech/custom-rpc#readme"
+  "homepage": "https://github.com/AmbireTech/custom-rpc#readme",
+  "dependencies": {
+    "ethers": "^5.5.2"
+  }
 }
