@@ -1,4 +1,4 @@
-const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
+const { StaticJsonRpcProvider, WebSocketProvider, JsonRpcProvider } = require('ethers').providers
 
 const providers = {
   polygon: [
@@ -16,78 +16,61 @@ function init () {
   byNetworkCounter[network] = 1;
 
   for (let providerUrl of providers[network]) {
-    byNetwork[network].push(getProxy(network, providerUrl, chainId))
+
+    const provider = providerUrl.startsWith('wss:')
+      ? new WebSocketProvider(providerUrl, { network, chainId })
+      : new StaticJsonRpcProvider(providerUrl, { network, chainId })
+
+    if (provider) {
+      provider.on('error', function (e) {
+        console.error(`[${new Date().toLocaleString()}] RPC "[${providerUrl}]" return error`, e)
+      })
+    }
+
+    if (provider && provider._websocket && provider._websocket.on) {
+      provider._websocket.on('error', function (e) {
+        console.error(`[${new Date().toLocaleString()}] provider RPC "[${providerUrl}]" return socket error`, e)
+      })
+    }
+
+    byNetwork[network].push(provider)
   }
 }
 
-function getProxy(networkName, providerUrl, chainId) {
-  const rpc = new CustomRPC(networkName, providerUrl, chainId)
-  const provider = rpc.getProvider()
+function getProvider(networkName, chainId) {
+  if (! byNetwork[networkName]) return null
+  const rpc = new CustomRPC()
 
-  return new Proxy(provider, {
+  return new Proxy(rpc, {
     get: function get(target, prop, receiver) {
 
-      // an example of how to access the send function and its
-      // arguments like eth_blockNumber, eth_getBlockByNumber.
-      if (prop == 'send' && typeof(provider[prop]) == 'function') {
+      const provider = chooseProvider(networkName, ...arguments)
 
+      if (typeof(provider[prop]) == 'function') {
         return function() {
-          // an example response from console.log:
-          // [Arguments] { '0': 'eth_blockNumber', '1': [] }
-          // here, we can go further down and do:
-          // if (arguments[0] == 'eth_blockNumber') do smt
-          console.log(arguments)
-          return target[prop].apply( this, arguments );
+          return provider[prop]( ...arguments )
         }
       }
 
-      return Reflect.get(...arguments)
+      return provider[prop]
     }
   });
 }
 
-class CustomRPC {
-  provider = null
-
-  constructor(networkName, url, chainId) {
-
-    this.provider = url.startsWith('wss:')
-      ? new WebSocketProvider(url, { networkName, chainId })
-      : new StaticJsonRpcProvider(url, { networkName, chainId })
-
-    if (this.provider) {
-      this.provider.on('error', function (e) {
-        console.error(`[${new Date().toLocaleString()}] RPC "[${url}]" return error`, e)
-      })
-    }
-
-    if (this.provider && this.provider._websocket && this.provider._websocket.on) {
-      this.provider._websocket.on('error', function (e) {
-        console.error(`[${new Date().toLocaleString()}] provider RPC "[${url}]" return socket error`, e)
-      })
-    }
-  }
-
-  getProvider() {
-    return this.provider
-  }
-}
-
-function getCurrentProviderIndex (network) {
-  return byNetworkCounter[network] % providers[network].length
-}
-
-function getProvider(networkName) {
-  if (! byNetwork[networkName]) return null
-
+function chooseProvider(networkName, prop, arguments) {
   const currentIndex = getCurrentProviderIndex(networkName);
   byNetworkCounter[networkName]++;
 
   console.log('Current index is: ' + currentIndex)
 
   return byNetwork[networkName][currentIndex]
-    ? byNetwork[networkName][currentIndex]
-    : null
+}
+
+class CustomRPC {
+}
+
+function getCurrentProviderIndex (network) {
+  return byNetworkCounter[network] % providers[network].length
 }
 
 init()
