@@ -1,4 +1,4 @@
-const { StaticJsonRpcProvider, WebSocketProvider, JsonRpcProvider } = require('ethers').providers
+const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
 
 const providers = {
   polygon: [
@@ -13,7 +13,7 @@ function init () {
   const network = 'polygon'
   const chainId = 137
   byNetwork[network] = []
-  byNetworkCounter[network] = 1;
+  byNetworkCounter[network] = 1
 
   for (let providerUrl of providers[network]) {
 
@@ -39,34 +39,33 @@ function init () {
 
 function getProvider(networkName, chainId) {
   if (! byNetwork[networkName]) return null
-  const rpc = new CustomRPC()
 
-  return new Proxy(rpc, {
+  return new Proxy({}, {
     get: function get(target, prop, receiver) {
 
-      const provider = chooseProvider(networkName, ...arguments)
+      let provider = chooseProvider(networkName, prop)
 
       if (typeof(provider[prop]) == 'function') {
         return function() {
+          provider = chooseProvider(networkName, prop, arguments)
           return provider[prop]( ...arguments )
         }
       }
 
       return provider[prop]
     }
-  });
+  })
 }
 
-function chooseProvider(networkName, prop, arguments) {
+function chooseProvider(networkName, propertyOrMethod, arguments) {
+  console.log(propertyOrMethod, arguments)
+
   const currentIndex = getCurrentProviderIndex(networkName);
   byNetworkCounter[networkName]++;
 
   console.log('Current index is: ' + currentIndex)
 
   return byNetwork[networkName][currentIndex]
-}
-
-class CustomRPC {
 }
 
 function getCurrentProviderIndex (network) {
