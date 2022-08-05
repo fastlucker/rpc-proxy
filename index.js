@@ -61,40 +61,22 @@ class CustomRPC {
   getProvider() {
     return this.provider
   }
-
-  getBlockWithTransactions(blockHashOrBlockTag) {
-    console.log('I am extending getBlockWithTransactions')
-    return this.provider.getBlockWithTransactions(blockHashOrBlockTag)
-  }
-
-  // send(method, params) {
-  //   console.log('I am extending send')
-  //   return this.provider.send(method, params)
-  // }
 }
 
 function getProvider(networkName, chainId) {
   const rpc = new CustomRPC(networkName, chainId)
-  if (rpc.getProvider() == null) return null;
+  const provider = rpc.getProvider()
+  if (provider == null) return null;
 
-  return new Proxy(rpc, {
-    get: function get(target, name) {
-      return function wrapper() {
+  return new Proxy(provider, {
+    get: function get(target, name, receiver) {
 
-        // if we want to extend/override explicity the method,
-        // we do so here
-        if (typeof(rpc[name]) == 'function') {
-          return rpc[name](...arguments)
-        }
-
-        // if we want just want to proceed with the normal exec,
-        // we pass it on to the original provider
-        const provider = rpc.getProvider()
-        if (typeof(provider[name]) == 'function') {
-          console.log(name)
-          return provider[name](...arguments)
-        }
+      if (name == 'getBlockWithTransactions') {
+        console.log('I am extending getBlockWithTransactions')
+        return Reflect.get(...arguments);
       }
+
+      return Reflect.get(...arguments);
     }
   });
 }
