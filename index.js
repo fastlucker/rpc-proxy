@@ -69,14 +69,23 @@ function getProvider(networkName, chainId) {
   if (provider == null) return null;
 
   return new Proxy(provider, {
-    get: function get(target, name, receiver) {
+    get: function get(target, prop, receiver) {
 
-      if (name == 'getBlockWithTransactions') {
-        console.log('I am extending getBlockWithTransactions')
-        return Reflect.get(...arguments);
+      // an example of how to access the send function and its
+      // arguments like eth_blockNumber, eth_getBlockByNumber.
+      if (prop == 'send' && typeof(provider[prop]) == 'function') {
+
+        return function() {
+          // an example response from console.log:
+          // [Arguments] { '0': 'eth_blockNumber', '1': [] }
+          // here, we can go further down and do:
+          // if (arguments[0] == 'eth_blockNumber') do smt
+          console.log(arguments)
+          return target[prop].apply( this, arguments );
+        }
       }
 
-      return Reflect.get(...arguments);
+      return Reflect.get(...arguments)
     }
   });
 }
