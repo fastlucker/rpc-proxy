@@ -6,20 +6,21 @@ const providers = {
     'https://rpc.ankr.com/polygon',
   ]
 }
+let counter = 0;
+const byNetwork = {}
 
 class CustomRPC {
-  counter = 0;
-  byNetwork = {}
   provider = null
 
   constructor(networkName, chainId) {
     if (networkName !== 'polygon') return
 
     // move the counter
-    this.counter++
+    counter++
     const currentIndex = this.getCurrentProviderIndex(networkName);
-    if (this.byNetwork[networkName] && this.byNetwork[networkName][currentIndex]) {
-      return this.byNetwork[networkName][currentIndex]
+    if (byNetwork[networkName] && byNetwork[networkName][currentIndex]) {
+      this.provider = byNetwork[networkName][currentIndex]
+      return
     }
 
     const url = this.getProviderUrl(networkName)
@@ -39,18 +40,18 @@ class CustomRPC {
       })
     }
 
-    if (! this.byNetwork[networkName]) this.byNetwork[networkName] = {}
-    this.byNetwork[networkName][currentIndex] = this.provider;
+    if (! byNetwork[networkName]) byNetwork[networkName] = {}
+    byNetwork[networkName][currentIndex] = this.provider;
   }
 
   getCurrentProviderIndex (network) {
-    return this.counter % providers[network].length
+    return counter % providers[network].length
   }
 
   getProviderUrl (network) {
     const nextProviderIndex = this.getCurrentProviderIndex(network)
 
-    console.log(`provider counter: ${this.counter}`)
+    console.log(`provider counter: ${counter}`)
     console.log(`provider index: ${nextProviderIndex}`)
     console.log(`provider url: ${providers[network][nextProviderIndex]}`)
 
