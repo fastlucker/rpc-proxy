@@ -6,67 +6,23 @@ const providers = {
     'https://rpc.ankr.com/polygon',
   ]
 }
-let counter = 0;
 const byNetwork = {}
+const byNetworkCounter = {}
 
-class CustomRPC {
-  provider = null
+function init () {
+  const network = 'polygon'
+  const chainId = 137
+  byNetwork[network] = []
+  byNetworkCounter[network] = 1;
 
-  constructor(networkName, chainId) {
-    if (networkName !== 'polygon') return
-
-    // move the counter
-    counter++
-    const currentIndex = this.getCurrentProviderIndex(networkName);
-    if (byNetwork[networkName] && byNetwork[networkName][currentIndex]) {
-      this.provider = byNetwork[networkName][currentIndex]
-      return
-    }
-
-    const url = this.getProviderUrl(networkName)
-    this.provider = url.startsWith('wss:')
-      ? new WebSocketProvider(url, { networkName, chainId })
-      : new StaticJsonRpcProvider(url, { networkName, chainId })
-
-    if (this.provider) {
-      this.provider.on('error', function (e) {
-        console.error(`[${new Date().toLocaleString()}] RPC "[${url}]" return error`, e)
-      })
-    }
-
-    if (this.provider && this.provider._websocket && this.provider._websocket.on) {
-      this.provider._websocket.on('error', function (e) {
-        console.error(`[${new Date().toLocaleString()}] provider RPC "[${url}]" return socket error`, e)
-      })
-    }
-
-    if (! byNetwork[networkName]) byNetwork[networkName] = {}
-    byNetwork[networkName][currentIndex] = this.provider;
-  }
-
-  getCurrentProviderIndex (network) {
-    return counter % providers[network].length
-  }
-
-  getProviderUrl (network) {
-    const nextProviderIndex = this.getCurrentProviderIndex(network)
-
-    console.log(`provider counter: ${counter}`)
-    console.log(`provider index: ${nextProviderIndex}`)
-    console.log(`provider url: ${providers[network][nextProviderIndex]}`)
-
-    return providers[network][nextProviderIndex]
-  }
-
-  getProvider() {
-    return this.provider
+  for (let providerUrl of providers[network]) {
+    byNetwork[network].push(getProxy(network, providerUrl, chainId))
   }
 }
 
-function getProvider(networkName, chainId) {
-  const rpc = new CustomRPC(networkName, chainId)
+function getProxy(networkName, providerUrl, chainId) {
+  const rpc = new CustomRPC(networkName, providerUrl, chainId)
   const provider = rpc.getProvider()
-  if (provider == null) return null;
 
   return new Proxy(provider, {
     get: function get(target, prop, receiver) {
@@ -89,5 +45,51 @@ function getProvider(networkName, chainId) {
     }
   });
 }
+
+class CustomRPC {
+  provider = null
+
+  constructor(networkName, url, chainId) {
+
+    this.provider = url.startsWith('wss:')
+      ? new WebSocketProvider(url, { networkName, chainId })
+      : new StaticJsonRpcProvider(url, { networkName, chainId })
+
+    if (this.provider) {
+      this.provider.on('error', function (e) {
+        console.error(`[${new Date().toLocaleString()}] RPC "[${url}]" return error`, e)
+      })
+    }
+
+    if (this.provider && this.provider._websocket && this.provider._websocket.on) {
+      this.provider._websocket.on('error', function (e) {
+        console.error(`[${new Date().toLocaleString()}] provider RPC "[${url}]" return socket error`, e)
+      })
+    }
+  }
+
+  getProvider() {
+    return this.provider
+  }
+}
+
+function getCurrentProviderIndex (network) {
+  return byNetworkCounter[network] % providers[network].length
+}
+
+function getProvider(networkName) {
+  if (! byNetwork[networkName]) return null
+
+  const currentIndex = getCurrentProviderIndex(networkName);
+  byNetworkCounter[networkName]++;
+
+  console.log('Current index is: ' + currentIndex)
+
+  return byNetwork[networkName][currentIndex]
+    ? byNetwork[networkName][currentIndex]
+    : null
+}
+
+init()
 
 module.exports = { getProvider }
