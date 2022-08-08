@@ -8,6 +8,20 @@ const providers = {
 }
 const byNetwork = {}
 const byNetworkCounter = {}
+let callCount = 0
+const callLog = []
+
+function logCall(provider, propertyOrMethod, arguments, cached, res) {
+  callLog.push({
+    id: callCount,
+    providerUrl: provider ? provider.connection.url : null,
+    propertyOrMethod: propertyOrMethod,
+    args: arguments,
+    cached: cached,
+    response: res
+  })
+  callCount++
+}
 
 function init () {
   const network = 'polygon'
@@ -46,23 +60,37 @@ function getProvider(networkName, chainId) {
 
   return new Proxy({}, {
     get: function get(target, prop, receiver) {
+      let result
 
       // target only the send function as the send function
       // is the one calling eth_call, eth_sendTransaction
       if (typeof(byNetwork[networkName][0].provider[prop]) == 'function') {
         return function() {
           const provider = chooseProvider(networkName, prop, arguments)
-          return provider[prop]( ...arguments )
+
+          // simulate/return chain id without making an RPC call
+          if (prop === 'send' && arguments[0] === 'eth_chainId') {
+            result = `0x${provider._network.chainId.toString(16)}`
+            logCall(provider, prop, arguments, true, result)
+            return result
+          }
+
+          result = provider[prop]( ...arguments )
+          logCall(provider, prop, arguments, false, result)
+          return result
         }
       }
 
       const provider = chooseProvider(networkName, prop, arguments)
-      return provider[prop]
+      result = provider[prop]
+      logCall(provider, prop, arguments, false, result)
+      return result
     }
   })
 }
 
 function chooseProvider(networkName, propertyOrMethod, arguments) {
+  console.log(`--- Called method and args: ${propertyOrMethod} ${arguments}`)
 
   // plan
   // search the tags for the passed propertyOrMethod.
@@ -107,4 +135,4 @@ function getCurrentProviderIndex (network) {
 
 init()
 
-module.exports = { getProvider }
+module.exports = { getProvider, callLog }
