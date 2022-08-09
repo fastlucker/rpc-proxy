@@ -1,11 +1,23 @@
 const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
 
 const providers = {
-  polygon: [
-    {url: 'https://polygon-rpc.com/rpc', tags: ['call','eth_sendRawTransaction','getLogs','eth_getLogs']},
-    {url: 'https://rpc.ankr.com/polygon', tags: ['call']}
-  ]
+  ethereum: {
+    RPCs: [
+      {url: 'https://eth-mainnet.alchemyapi.io/v2/e5Gr8LP_EH0SBPZiNCcC08OuEDrvgoYK', tags: []},
+      {url: 'https://mainnet.infura.io/v3/d4319c39c4df452286d8bf6d10de28ae', tags: ['getLogs','eth_getLogs']},
+      {url: 'wss://mainnet.infura.io/ws/v3/d4319c39c4df452286d8bf6d10de28ae', tags: ['getLogs','eth_getLogs']}  
+    ],
+    chainId: 1
+  },
+  polygon: {
+    RPCs: [
+      {url: 'https://polygon-rpc.com/rpc', tags: ['call','eth_sendRawTransaction','getLogs','eth_getLogs']},
+      {url: 'https://rpc.ankr.com/polygon', tags: ['call']}
+    ],
+    chainId: 137
+  }
 }
+
 const byNetwork = {}
 const byNetworkCounter = {}
 let callCount = 0
@@ -24,34 +36,34 @@ function logCall(provider, propertyOrMethod, arguments, cached, res) {
 }
 
 function init () {
-  const network = 'polygon'
-  const chainId = 137
-  byNetwork[network] = []
-  byNetworkCounter[network] = 1
+  for (const network in providers) {
+    const chainId = providers[network]['chainId']
+    byNetwork[network] = []
+    byNetworkCounter[network] = 1
 
-  for (let providerInfo of providers[network]) {
+    for (let providerInfo of providers[network]['RPCs']) {
+      const providerUrl = providerInfo['url']
+      const provider = providerUrl.startsWith('wss:')
+        ? new WebSocketProvider(providerUrl, { network, chainId })
+        : new StaticJsonRpcProvider(providerUrl, { network, chainId })
 
-    const providerUrl = providerInfo['url']
-    const provider = providerUrl.startsWith('wss:')
-      ? new WebSocketProvider(providerUrl, { network, chainId })
-      : new StaticJsonRpcProvider(providerUrl, { network, chainId })
+      if (provider) {
+        provider.on('error', function (e) {
+          console.error(`[${new Date().toLocaleString()}] RPC "[${providerUrl}]" return error`, e)
+        })
+      }
 
-    if (provider) {
-      provider.on('error', function (e) {
-        console.error(`[${new Date().toLocaleString()}] RPC "[${providerUrl}]" return error`, e)
+      if (provider && provider._websocket && provider._websocket.on) {
+        provider._websocket.on('error', function (e) {
+          console.error(`[${new Date().toLocaleString()}] provider RPC "[${providerUrl}]" return socket error`, e)
+        })
+      }
+
+      byNetwork[network].push({
+        url: providerUrl,
+        provider: provider
       })
     }
-
-    if (provider && provider._websocket && provider._websocket.on) {
-      provider._websocket.on('error', function (e) {
-        console.error(`[${new Date().toLocaleString()}] provider RPC "[${providerUrl}]" return socket error`, e)
-      })
-    }
-
-    byNetwork[network].push({
-      url: providerUrl,
-      provider: provider
-    })
   }
 }
 
@@ -100,12 +112,14 @@ function chooseProvider(networkName, propertyOrMethod, arguments) {
   // if found in all providers, rotate
   // if found in 0 < x < max providers, set one of those providers
 
-  let validProviders = providers[networkName].filter(i => i['tags'].includes(propertyOrMethod))
+  const networkRPCs = providers[networkName]['RPCs']
+
+  let validProviders = networkRPCs.filter(i => i['tags'].includes(propertyOrMethod))
   if (validProviders.length == 0 && propertyOrMethod == 'send') {
-    validProviders = providers[networkName].filter(i => i['tags'].includes(arguments[0]))
+    validProviders = networkRPCs.filter(i => i['tags'].includes(arguments[0]))
   }
   if (
-    validProviders.length == 0 || validProviders.length == providers[networkName].length
+    validProviders.length == 0 || validProviders.length == networkRPCs.length
   ) {
     return roundRobbinRotate(networkName)
   }
@@ -130,7 +144,7 @@ function roundRobbinRotate(networkName) {
 }
 
 function getCurrentProviderIndex (network) {
-  return byNetworkCounter[network] % providers[network].length
+  return byNetworkCounter[network] % providers[network]['RPCs'].length
 }
 
 init()
