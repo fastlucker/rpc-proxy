@@ -2,7 +2,7 @@ const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
 
 const providers = {
   polygon: [
-    {url: 'https://polygon-rpc.com/rpc', tags: ['call','eth_sendRawTransaction']},
+    {url: 'https://polygon-rpc.com/rpc', tags: ['call','eth_sendRawTransaction','getLogs','eth_getLogs']},
     {url: 'https://rpc.ankr.com/polygon', tags: ['call']}
   ]
 }
