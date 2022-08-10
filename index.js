@@ -33,9 +33,9 @@ function init () {
         : new StaticJsonRpcProvider({url: providerUrl, ...connectionParams}, { network, chainId })
 
       if (provider) {
-        provider.on('error', function (e) {
-          console.error(`[${new Date().toLocaleString()}] RPC "[${providerUrl}]" return error`, e)
-        })
+        // provider.on('error', function (e) {
+        //   console.error(`[${new Date().toLocaleString()}] RPC "[${providerUrl}]" return error`, e)
+        // })
 
         // if there is an error in debug, lower the rating of the RPC that has an error
         // provider.on('debug', function (e) {
@@ -83,10 +83,21 @@ function getProvider(networkName, chainId) {
             return result
           }
 
+          // #buggy: fixup argument if 'getBlock' or 'getBlockWithTransactions' are called
+          // related to this discussion: https://github.com/ethers-io/ethers.js/discussions/3072
+          if (['getBlock', 'getBlockWithTransactions'].includes(prop)) {
+            arguments[0] = arguments[0] == -1 ? 'latest' : arguments[0]
+          }
+
           try {
-            result = await provider[prop]( ...arguments )
+            result = provider[prop]( ...arguments )
+            if (typeof result === 'object' && typeof result.then === 'function') {
+              result = await result
+              logCall(provider, prop, arguments, false, result)
+              return new Promise(resolve => resolve(result))
+            }
             logCall(provider, prop, arguments, false, result)
-            return new Promise(resolve => resolve(result))
+            return result
           } catch (e) {
             console.log('an error was returned, lowering the rating')
             console.log(e)
