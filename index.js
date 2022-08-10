@@ -86,7 +86,7 @@ function getProvider(networkName, chainId) {
 }
 
 function chooseProvider(networkName, propertyOrMethod, arguments) {
-  console.log(`--- Called method and args: ${propertyOrMethod} ${arguments}`)
+  // console.log(`--- Called method and args: ${propertyOrMethod} ${arguments}`)
 
   // plan
   // search the tags for the passed propertyOrMethod.
@@ -109,11 +109,11 @@ function chooseProvider(networkName, propertyOrMethod, arguments) {
   }
 
   if (propertyOrMethod == 'send') {
-    console.log('Send eth method: ' + arguments[0])
+    // console.log('Send eth method: ' + arguments[0])
   }
 
   const rnd = Math.floor(Math.random() * validProviders.length)
-  console.log('Setting predefined with index: ' + rnd)
+  // console.log('Setting predefined with index: ' + rnd)
   const providerUrl = validProviders[rnd]['url']
   return byNetwork[networkName].filter(i => i.url == providerUrl)[0].provider
 }
@@ -123,7 +123,7 @@ function roundRobbinRotate(networkName) {
   const currentIndex = getCurrentProviderIndex(networkName);
   byNetworkCounter[networkName]++;
 
-  console.log('Round robbin rotate. Current index is: ' + currentIndex)
+  // console.log('Round robbin rotate. Current index is: ' + currentIndex)
   return byNetwork[networkName][currentIndex].provider
 }
 
@@ -131,6 +131,14 @@ function getCurrentProviderIndex (network) {
   return byNetworkCounter[network] % providers[network]['RPCs'].length
 }
 
+function getByNetwork() {
+  return byNetwork
+}
+
+function setByNetwork(mockedProviders) {
+  return mockedProviders
+}
+
 init()
 
-module.exports = { getProvider, callLog }
+module.exports = { getProvider, callLog, getByNetwork, setByNetwork }
