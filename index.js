@@ -35,6 +35,16 @@ function init () {
         provider.on('error', function (e) {
           console.error(`[${new Date().toLocaleString()}] RPC "[${providerUrl}]" return error`, e)
         })
+
+        // if there is an error in debug, lower the rating of the RPC that has an error
+        provider.on('debug', function (e) {
+          if (e.error) {
+            const errorNetwork = e.provider._network.network
+            const errorProviderUrl = e.provider.connection.url
+
+            byNetwork[errorNetwork].filter(i => i.url == errorProviderUrl)[0].rating--
+          }
+        })
       }
 
       if (provider && provider._websocket && provider._websocket.on) {
@@ -45,7 +55,8 @@ function init () {
 
       byNetwork[network].push({
         url: providerUrl,
-        provider: provider
+        provider: provider,
+        rating: 100
       })
     }
   }
@@ -102,33 +113,42 @@ function chooseProvider(networkName, propertyOrMethod, arguments) {
   if (validProviders.length == 0 && propertyOrMethod == 'send') {
     validProviders = networkRPCs.filter(i => i['tags'].includes(arguments[0]))
   }
-  if (
-    validProviders.length == 0 || validProviders.length == networkRPCs.length
-  ) {
-    return roundRobbinRotate(networkName)
+
+  // if there are no specific providers, set them back to all
+  if (validProviders.length == 0) {
+    validProviders = byNetwork[networkName]
   }
 
-  if (propertyOrMethod == 'send') {
-    // console.log('Send eth method: ' + arguments[0])
-  }
-
-  const rnd = Math.floor(Math.random() * validProviders.length)
-  // console.log('Setting predefined with index: ' + rnd)
-  const providerUrl = validProviders[rnd]['url']
-  return byNetwork[networkName].filter(i => i.url == providerUrl)[0].provider
+  // take the ones with the highest ratings only and rotate them
+  validProviders = getProvidersWithHighestRating(validProviders)
+  return roundRobbinRotate(networkName, validProviders)
 }
 
-function roundRobbinRotate(networkName) {
-
-  const currentIndex = getCurrentProviderIndex(networkName);
+function roundRobbinRotate(networkName, singleNetworkProviders) {
+  const currentIndex = getCurrentProviderIndex(networkName, singleNetworkProviders);
   byNetworkCounter[networkName]++;
 
-  // console.log('Round robbin rotate. Current index is: ' + currentIndex)
+  // console.log('Round robbin, network: '+ networkName +'. Current index is: ' + currentIndex)
   return byNetwork[networkName][currentIndex].provider
 }
 
-function getCurrentProviderIndex (network) {
-  return byNetworkCounter[network] % providers[network]['RPCs'].length
+// return only the providers that have the highest rating
+function getProvidersWithHighestRating(singleNetworkProviders) {
+  const sorted = singleNetworkProviders.sort(function(a, b) {
+    return b.rating - a.rating
+  })
+  const highest = sorted[0].rating
+  return sorted.filter(one => {
+    return one.rating == highest
+  })
+}
+
+function getCurrentProviderIndex (network, filteredProviders = null) {
+  const finalProviders = filteredProviders != null
+    ? filteredProviders
+    : providers[network]['RPCs']
+
+  return byNetworkCounter[network] % finalProviders.length
 }
 
 function getByNetwork() {
@@ -141,4 +161,4 @@ function setByNetwork(mockedProviders) {
 
 init()
 
-module.exports = { getProvider, callLog, getByNetwork, setByNetwork }
+module.exports = { getProvider, callLog, getByNetwork, setByNetwork, init }
