@@ -37,14 +37,14 @@ function init () {
         })
 
         // if there is an error in debug, lower the rating of the RPC that has an error
-        provider.on('debug', function (e) {
-          if (e.error) {
-            const errorNetwork = e.provider._network.network
-            const errorProviderUrl = e.provider.connection.url
+        // provider.on('debug', function (e) {
+        //   if (e.error) {
+        //     const errorNetwork = e.provider._network.network
+        //     const errorProviderUrl = e.provider.connection.url
 
-            byNetwork[errorNetwork].filter(i => i.url == errorProviderUrl)[0].rating--
-          }
-        })
+        //     byNetwork[errorNetwork].filter(i => i.url == errorProviderUrl)[0].rating--
+        //   }
+        // })
       }
 
       if (provider && provider._websocket && provider._websocket.on) {
@@ -82,9 +82,26 @@ function getProvider(networkName, chainId) {
             return result
           }
 
-          result = provider[prop]( ...arguments )
-          logCall(provider, prop, arguments, false, result)
-          return result
+          return new Promise((resolve, reject) => {
+            try {
+              result = provider[prop]( ...arguments )
+              logCall(provider, prop, arguments, false, result)
+              resolve(result)
+            } catch (e) {
+              // lower the rating
+              byNetwork[networkName].filter(i => i.url == provider.connection.url)[0].rating--
+
+              const provider = chooseProvider(networkName, prop, arguments)
+              try {
+                result = provider[prop]( ...arguments )
+                logCall(provider, prop, arguments, false, result)
+                return result
+              } catch (ee) {
+                byNetwork[networkName].filter(i => i.url == provider.connection.url)[0].rating--
+                reject(ee)
+              }
+            }
+          });
         }
       }
 
@@ -161,4 +178,4 @@ function setByNetwork(mockedProviders) {
 
 init()
 
-module.exports = { getProvider, callLog, getByNetwork, setByNetwork, init }
+module.exports = { getProvider, callLog, getByNetwork, setByNetwork }
