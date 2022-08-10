@@ -26,10 +26,11 @@ function init () {
     byNetworkCounter[network] = 1
 
     for (let providerInfo of providers[network]['RPCs']) {
+      const connectionParams = {timeout: 3000, throttleLimit: 2, throttleSlotInterval: 10}
       const providerUrl = providerInfo['url']
       const provider = providerUrl.startsWith('wss:')
-        ? new WebSocketProvider(providerUrl, { network, chainId })
-        : new StaticJsonRpcProvider(providerUrl, { network, chainId })
+        ? new WebSocketProvider({url: providerUrl, ...connectionParams}, { network, chainId })
+        : new StaticJsonRpcProvider({url: providerUrl, ...connectionParams}, { network, chainId })
 
       if (provider) {
         provider.on('error', function (e) {
