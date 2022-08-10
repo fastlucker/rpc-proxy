@@ -72,7 +72,7 @@ function getProvider(networkName, chainId) {
       // target only the send function as the send function
       // is the one calling eth_call, eth_sendTransaction
       if (typeof(byNetwork[networkName][0].provider[prop]) == 'function') {
-        return function() {
+        return async function() {
           const provider = chooseProvider(networkName, prop, arguments)
 
           // simulate/return chain id without making an RPC call
@@ -82,26 +82,19 @@ function getProvider(networkName, chainId) {
             return result
           }
 
-          return new Promise((resolve, reject) => {
-            try {
-              result = provider[prop]( ...arguments )
-              logCall(provider, prop, arguments, false, result)
-              resolve(result)
-            } catch (e) {
-              // lower the rating
-              byNetwork[networkName].filter(i => i.url == provider.connection.url)[0].rating--
-
-              const provider = chooseProvider(networkName, prop, arguments)
-              try {
-                result = provider[prop]( ...arguments )
-                logCall(provider, prop, arguments, false, result)
-                return result
-              } catch (ee) {
-                byNetwork[networkName].filter(i => i.url == provider.connection.url)[0].rating--
-                reject(ee)
-              }
-            }
-          });
+          try {
+            result = await provider[prop]( ...arguments )
+            logCall(provider, prop, arguments, false, result)
+            return new Promise(resolve => resolve(result))
+          } catch (e) {
+            console.log('an error was returned, lowering the rating')
+            console.log(e)
+            byNetwork[networkName].filter(i => i.url == provider.connection.url)[0].rating--
+            const newProvider = chooseProvider(networkName, prop, arguments)
+            result = newProvider[prop]( ...arguments )
+            logCall(newProvider, prop, arguments, false, result)
+            return result
+          }
         }
       }
 
