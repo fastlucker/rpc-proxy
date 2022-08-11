@@ -138,7 +138,7 @@ function getProvider(networkName, chainId) {
   })
 }
 
-function chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, failedRPC = null) {
+function chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, failedProvider = null) {
   // console.log(`--- Called method and args: ${propertyOrMethod} ${arguments}`)
 
   // plan
@@ -166,14 +166,16 @@ function chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, 
   if (
     validRPCs.length == 0
     || (
-      failedRPC != null
+      failedProvider != null
       && validRPCs.length == 1
-      && validRPCs[0].url == failedRPC.connection.url
+      && validRPCs[0].url == failedProvider.connection.url
     )
   ) {
     // try to exclude the failed RPC... but if there are no other RPCs
     // available, we have no choice except to try again with the failed one
-    validRPCs = networkRPCs.filter(rpc => rpc.url != failedRPC.connection.url)
+    if (failedProvider) {
+      validRPCs = networkRPCs.filter(rpc => rpc.url != failedProvider.connection.url)
+    }
     if (validRPCs.length == 0) validRPCs = networkRPCs
   }
 
