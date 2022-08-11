@@ -200,7 +200,7 @@ async function tryBlock(networkName, provider, prop, arguments, counter = 0) {
     // "other" handler
 
   } catch (e) {
-    const newProvider = getNewProviderOrStopExec(counter, networkName, provider)
+    const newProvider = getNewProviderOrStopExec(counter, networkName, prop, provider)
     return tryBlock(networkName, newProvider, prop, arguments, counter++)
   }
 }
@@ -211,12 +211,12 @@ function tryBlock2(networkName, provider, prop, arguments, counter = 0) {
     logCall(provider, prop, arguments, false, result)
     return result
   } catch (e) {
-    const newProvider = getNewProviderOrStopExec(counter, networkName, provider)
+    const newProvider = getNewProviderOrStopExec(counter, networkName, prop, provider)
     return tryBlock2(networkName, newProvider, prop, arguments, counter++)
   }
 }
 
-function getNewProviderOrStopExec(counter) {
+function getNewProviderOrStopExec(counter, networkName, prop, provider) {
   // MAX: the number of fallbacks we want to have
   if (counter >= 1) {
     throw e;
