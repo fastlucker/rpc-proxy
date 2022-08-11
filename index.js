@@ -75,28 +75,12 @@ function getProvider(networkName, chainId) {
       if (typeof(byNetwork[networkName][0].provider[prop]) == 'function') {
         return async function() {
           const provider = chooseProvider(networkName, prop, arguments[0])
-
-          // simulate/return chain id without making an RPC call
-          if (prop === 'send' && arguments[0] === 'eth_chainId') {
-            result = `0x${provider._network.chainId.toString(16)}`
-            logCall(provider, prop, arguments, true, result)
-            return result
-          }
-
-          // #buggy: fixup argument if 'getBlock' or 'getBlockWithTransactions' are called
-          // related to this discussion: https://github.com/ethers-io/ethers.js/discussions/3072
-          if (['getBlock', 'getBlockWithTransactions'].includes(prop)) {
-            arguments[0] = arguments[0] == -1 ? 'latest' : arguments[0]
-          }
-
           return tryBlock(networkName, provider, prop, arguments)
         }
       }
 
       const provider = chooseProvider(networkName, prop, arguments[0])
-      result = provider[prop]
-      logCall(provider, prop, arguments, false, result)
-      return result
+      return tryBlock2(networkName, provider, prop, arguments)
     }
   })
 }
@@ -181,36 +165,71 @@ function setByNetwork(mockedProviders) {
 async function tryBlock(networkName, provider, prop, arguments, counter = 0) {
   try {
 
-    result = provider[prop]( ...arguments )
+    // function handler
+    if (typeof(provider[prop]) == 'function') {
 
-    if (typeof result === 'object' && typeof result.then === 'function') {
-
-      if (networkName == 'polygon' && prop == 'send' && arguments[0] === 'eth_sendRawTransaction') {
-        console.log('FOR eth_sendRawTransaction: ' + provider.connection.url)
+      // simulate/return chain id without making an RPC call
+      if (prop === 'send' && arguments[0] === 'eth_chainId') {
+        result = `0x${provider._network.chainId.toString(16)}`
+        logCall(provider, prop, arguments, true, result)
+        return result
       }
 
-      result = await result
+      // #buggy: fixup argument if 'getBlock' or 'getBlockWithTransactions' are called
+      // related to this discussion: https://github.com/ethers-io/ethers.js/discussions/3072
+      if (['getBlock', 'getBlockWithTransactions'].includes(prop)) {
+        arguments[0] = arguments[0] == -1 ? 'latest' : arguments[0]
+      }
+
+      result = provider[prop]( ...arguments )
+
+      if (typeof result === 'object' && typeof result.then === 'function') {
+
+        if (networkName == 'polygon' && prop == 'send' && arguments[0] === 'eth_sendRawTransaction') {
+          console.log('FOR eth_sendRawTransaction: ' + provider.connection.url)
+        }
+
+        result = await result
+        logCall(provider, prop, arguments, false, result)
+        return new Promise(resolve => resolve(result))
+      }
       logCall(provider, prop, arguments, false, result)
-      return new Promise(resolve => resolve(result))
+      return result
     }
+
+    // "other" handler
+
+  } catch (e) {
+    const newProvider = getNewProviderOrStopExec(counter, networkName, provider)
+    return tryBlock(networkName, newProvider, prop, arguments, counter++)
+  }
+}
+
+function tryBlock2(networkName, provider, prop, arguments, counter = 0) {
+  try {
+    result = provider[prop]
     logCall(provider, prop, arguments, false, result)
     return result
   } catch (e) {
-    // MAX: the number of fallbacks we want to have
-    if (counter >= 1) {
-      throw e;
-    }
-
-    // lower the rating
-    byNetwork[networkName].map((object, index) => {
-      if (object.url == provider.connection.url) {
-        byNetwork[networkName][index].rating = byNetwork[networkName][index].rating - 1
-      }
-    })
-
-    const newProvider = chooseProvider(networkName, prop, arguments[0], provider)
-    return tryBlock(networkName, newProvider, prop, arguments, counter++)
+    const newProvider = getNewProviderOrStopExec(counter, networkName, provider)
+    return tryBlock2(networkName, newProvider, prop, arguments, counter++)
   }
+}
+
+function getNewProviderOrStopExec(counter) {
+  // MAX: the number of fallbacks we want to have
+  if (counter >= 1) {
+    throw e;
+  }
+
+  // lower the rating
+  byNetwork[networkName].map((object, index) => {
+    if (object.url == provider.connection.url) {
+      byNetwork[networkName][index].rating = byNetwork[networkName][index].rating - 1
+    }
+  })
+
+  return chooseProvider(networkName, prop, arguments[0], provider)
 }
 
 init()
