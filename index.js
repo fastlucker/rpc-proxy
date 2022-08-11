@@ -89,44 +89,7 @@ function getProvider(networkName, chainId) {
             arguments[0] = arguments[0] == -1 ? 'latest' : arguments[0]
           }
 
-          try {
-
-            result = provider[prop]( ...arguments )
-
-            if (typeof result === 'object' && typeof result.then === 'function') {
-
-              if (networkName == 'polygon' && prop == 'send' && arguments[0] === 'eth_sendRawTransaction') {
-                console.log('FOR eth_sendRawTransaction: ' + provider.connection.url)
-              }
-
-              result = await result
-              logCall(provider, prop, arguments, false, result)
-              return new Promise(resolve => resolve(result))
-            }
-            logCall(provider, prop, arguments, false, result)
-            return result
-          } catch (e) {
-
-            // lower the rating
-            byNetwork[networkName].map((object, index) => {
-              if (object.url == provider.connection.url) {
-                byNetwork[networkName][index].rating = byNetwork[networkName][index].rating - 1
-              }
-            })
-
-            const newProvider = chooseProvider(networkName, prop, arguments[0], provider)
-            result = newProvider[prop]( ...arguments )
-            logCall(newProvider, prop, arguments, false, result)
-
-            // if (networkName == 'polygon') {
-            //   console.log('an error was returned, lowering the rating')
-            //   console.log(e)
-            //   console.log('old provider url: ' + provider.connection.url)
-            //   console.log('new provider url: ' + newProvider.connection.url)
-            // }
-
-            return result
-          }
+          return tryBlock(networkName, provider, prop, arguments)
         }
       }
 
@@ -154,10 +117,6 @@ function chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, 
   let validRPCs = networkRPCs.filter(i => i['tags'].includes(propertyOrMethod))
   if (validRPCs.length == 0 && propertyOrMethod == 'send') {
     validRPCs = networkRPCs.filter(i => i['tags'].includes(sendMethodFirstArgument))
-  }
-
-  if (networkName == 'polygon' && propertyOrMethod == 'send' && sendMethodFirstArgument === 'eth_sendRawTransaction') {
-    console.log(validRPCs)
   }
 
   // if there are no specific providers, set them back to all.
@@ -217,6 +176,41 @@ function getByNetwork() {
 
 function setByNetwork(mockedProviders) {
   return mockedProviders
+}
+
+async function tryBlock(networkName, provider, prop, arguments, counter = 0) {
+  try {
+
+    result = provider[prop]( ...arguments )
+
+    if (typeof result === 'object' && typeof result.then === 'function') {
+
+      if (networkName == 'polygon' && prop == 'send' && arguments[0] === 'eth_sendRawTransaction') {
+        console.log('FOR eth_sendRawTransaction: ' + provider.connection.url)
+      }
+
+      result = await result
+      logCall(provider, prop, arguments, false, result)
+      return new Promise(resolve => resolve(result))
+    }
+    logCall(provider, prop, arguments, false, result)
+    return result
+  } catch (e) {
+    // MAX: the number of fallbacks we want to have
+    if (counter >= 1) {
+      throw e;
+    }
+
+    // lower the rating
+    byNetwork[networkName].map((object, index) => {
+      if (object.url == provider.connection.url) {
+        byNetwork[networkName][index].rating = byNetwork[networkName][index].rating - 1
+      }
+    })
+
+    const newProvider = chooseProvider(networkName, prop, arguments[0], provider)
+    return tryBlock(networkName, newProvider, prop, arguments, counter++)
+  }
 }
 
 init()
