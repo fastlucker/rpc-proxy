@@ -65,12 +65,12 @@ function getProvider(networkName) {
       if (typeof(byNetwork[networkName][0].provider[prop]) == 'function') {
         return async function() {
           const provider = chooseProvider(networkName, prop, arguments[0])
-          return tryBlock(networkName, provider, prop, arguments)
+          return handleTypeFunction(networkName, provider, prop, arguments)
         }
       }
 
       const provider = chooseProvider(networkName, prop, arguments[0])
-      return tryBlock2(networkName, provider, prop, arguments)
+      return handleTypeProp(networkName, provider, prop, arguments)
     }
   })
 }
@@ -153,7 +153,7 @@ function setByNetwork(mockedProviders) {
 }
 
 // The function handler try block
-async function tryBlock(networkName, provider, prop, arguments, counter = 0) {
+async function handleTypeFunction(networkName, provider, prop, arguments, counter = 0) {
   try {
     // simulate/return chain id without making an RPC call
     if (prop === 'send' && arguments[0] === 'eth_chainId') {
@@ -185,20 +185,20 @@ async function tryBlock(networkName, provider, prop, arguments, counter = 0) {
 
   } catch (e) {
     const newProvider = getNewProviderOrStopExec(counter, networkName, prop, provider)
-    return tryBlock(networkName, newProvider, prop, arguments, counter++)
+    return handleTypeFunction(networkName, newProvider, prop, arguments, counter++)
   }
 }
 
 // The property handler try block.
 // The difference is that the tryBlock is an async function while this one is not
-function tryBlock2(networkName, provider, prop, arguments, counter = 0) {
+function handleTypeProp(networkName, provider, prop, arguments, counter = 0) {
   try {
     result = provider[prop]
     logCall(provider, prop, arguments, false, result)
     return result
   } catch (e) {
     const newProvider = getNewProviderOrStopExec(counter, networkName, prop, provider)
-    return tryBlock2(networkName, newProvider, prop, arguments, counter++)
+    return handleTypeProp(networkName, newProvider, prop, arguments, counter++)
   }
 }
 
