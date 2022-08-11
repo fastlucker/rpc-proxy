@@ -74,7 +74,7 @@ function getProvider(networkName, chainId) {
       // is the one calling eth_call, eth_sendTransaction
       if (typeof(byNetwork[networkName][0].provider[prop]) == 'function') {
         return async function() {
-          const provider = chooseProvider(networkName, prop, arguments)
+          const provider = chooseProvider(networkName, prop, arguments[0])
 
           // simulate/return chain id without making an RPC call
           if (prop === 'send' && arguments[0] === 'eth_chainId') {
@@ -90,8 +90,15 @@ function getProvider(networkName, chainId) {
           }
 
           try {
+
             result = provider[prop]( ...arguments )
+
             if (typeof result === 'object' && typeof result.then === 'function') {
+
+              if (networkName == 'polygon' && prop == 'send' && arguments[0] === 'eth_sendRawTransaction') {
+                console.log('FOR eth_sendRawTransaction: ' + provider.connection.url)
+              }
+
               result = await result
               logCall(provider, prop, arguments, false, result)
               return new Promise(resolve => resolve(result))
@@ -99,18 +106,31 @@ function getProvider(networkName, chainId) {
             logCall(provider, prop, arguments, false, result)
             return result
           } catch (e) {
-            console.log('an error was returned, lowering the rating')
-            console.log(e)
-            byNetwork[networkName].filter(i => i.url == provider.connection.url)[0].rating--
-            const newProvider = chooseProvider(networkName, prop, arguments)
+
+            // lower the rating
+            byNetwork[networkName].map((object, index) => {
+              if (object.url == provider.connection.url) {
+                byNetwork[networkName][index].rating = byNetwork[networkName][index].rating - 1
+              }
+            })
+
+            const newProvider = chooseProvider(networkName, prop, arguments[0], provider)
             result = newProvider[prop]( ...arguments )
             logCall(newProvider, prop, arguments, false, result)
+
+            // if (networkName == 'polygon') {
+            //   console.log('an error was returned, lowering the rating')
+            //   console.log(e)
+            //   console.log('old provider url: ' + provider.connection.url)
+            //   console.log('new provider url: ' + newProvider.connection.url)
+            // }
+
             return result
           }
         }
       }
 
-      const provider = chooseProvider(networkName, prop, arguments)
+      const provider = chooseProvider(networkName, prop, arguments[0])
       result = provider[prop]
       logCall(provider, prop, arguments, false, result)
       return result
@@ -118,7 +138,7 @@ function getProvider(networkName, chainId) {
   })
 }
 
-function chooseProvider(networkName, propertyOrMethod, arguments) {
+function chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, failedRPC = null) {
   // console.log(`--- Called method and args: ${propertyOrMethod} ${arguments}`)
 
   // plan
@@ -131,27 +151,43 @@ function chooseProvider(networkName, propertyOrMethod, arguments) {
 
   const networkRPCs = providers[networkName]['RPCs']
 
-  let validProviders = networkRPCs.filter(i => i['tags'].includes(propertyOrMethod))
-  if (validProviders.length == 0 && propertyOrMethod == 'send') {
-    validProviders = networkRPCs.filter(i => i['tags'].includes(arguments[0]))
+  let validRPCs = networkRPCs.filter(i => i['tags'].includes(propertyOrMethod))
+  if (validRPCs.length == 0 && propertyOrMethod == 'send') {
+    validRPCs = networkRPCs.filter(i => i['tags'].includes(sendMethodFirstArgument))
   }
 
-  // if there are no specific providers, set them back to all
-  if (validProviders.length == 0) {
-    validProviders = byNetwork[networkName]
+  if (networkName == 'polygon' && propertyOrMethod == 'send' && sendMethodFirstArgument === 'eth_sendRawTransaction') {
+    console.log(validRPCs)
+  }
+
+  // if there are no specific providers, set them back to all.
+  // or... if we hit the fallback mechanism and all the specific
+  // RPCs for this request failed, just choose one of all possible.
+  if (
+    validRPCs.length == 0
+    || (
+      failedRPC != null
+      && validRPCs.length == 1
+      && validRPCs[0].url == failedRPC.connection.url
+    )
+  ) {
+    // try to exclude the failed RPC... but if there are no other RPCs
+    // available, we have no choice except to try again with the failed one
+    validRPCs = networkRPCs.filter(rpc => rpc.url != failedRPC.connection.url)
+    if (validRPCs.length == 0) validRPCs = networkRPCs
   }
 
   // take the ones with the highest ratings only and rotate them
-  validProviders = getProvidersWithHighestRating(validProviders)
-  return roundRobbinRotate(networkName, validProviders)
+  validRPCs = getProvidersWithHighestRating(validRPCs)
+  return roundRobbinRotate(networkName, validRPCs)
 }
 
-function roundRobbinRotate(networkName, singleNetworkProviders) {
-  const currentIndex = getCurrentProviderIndex(networkName, singleNetworkProviders);
+function roundRobbinRotate(networkName, singleNetworkRPCs) {
+  const currentIndex = getCurrentProviderIndex(networkName, singleNetworkRPCs);
   byNetworkCounter[networkName]++;
 
-  // console.log('Round robbin, network: '+ networkName +'. Current index is: ' + currentIndex)
-  return byNetwork[networkName][currentIndex].provider
+  const urls = singleNetworkRPCs.map(rpc => rpc.url)
+  return byNetwork[networkName].filter(info => urls.includes(info.url))[currentIndex].provider
 }
 
 // return only the providers that have the highest rating
@@ -165,8 +201,8 @@ function getProvidersWithHighestRating(singleNetworkProviders) {
   })
 }
 
-function getCurrentProviderIndex (network, filteredProviders = null) {
-  const finalProviders = filteredProviders != null
+function getCurrentProviderIndex (network, filteredProviders = []) {
+  const finalProviders = filteredProviders.length
     ? filteredProviders
     : providers[network]['RPCs']
 
