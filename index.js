@@ -58,24 +58,20 @@ function getProvider(networkName) {
 
   return new Proxy({}, {
     get: function get(target, prop, receiver) {
-      let result
-
       // target only the send function as the send function
       // is the one calling eth_call, eth_sendTransaction
       if (typeof(byNetwork[networkName][0].provider[prop]) == 'function') {
         return async function() {
-          const provider = chooseProvider(networkName, prop, arguments[0])
-          return handleTypeFunction(networkName, provider, prop, arguments)
+          return handleTypeFunction(networkName, prop, arguments)
         }
       }
 
-      const provider = chooseProvider(networkName, prop, arguments[0])
-      return handleTypeProp(networkName, provider, prop, arguments)
+      return handleTypeProp(networkName, prop, arguments)
     }
   })
 }
 
-function chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, failedProvider = null) {
+function chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, failedProviders = []) {
   // console.log(`--- Called method and args: ${propertyOrMethod} ${arguments}`)
 
   // plan
@@ -93,21 +89,23 @@ function chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, 
     validRPCs = networkRPCs.filter(i => i['tags'].includes(sendMethodFirstArgument))
   }
 
+  const uniqueFailedProviderUrls = [...new Set(failedProviders.map(provider => provider.connection.url))]
+
   // if there are no specific providers, set them back to all.
   // or... if we hit the fallback mechanism and all the specific
   // RPCs for this request failed, just choose one of all possible.
   if (
     validRPCs.length == 0
     || (
-      failedProvider != null
-      && validRPCs.length == 1
-      && validRPCs[0].url == failedProvider.connection.url
+      uniqueFailedProviderUrls.length > 0
+      && validRPCs.length == uniqueFailedProviderUrls.length
+      && validRPCs.filter(rpc => uniqueFailedProviderUrls.includes(rpc.url)).length == uniqueFailedProviderUrls.length
     )
   ) {
-    // try to exclude the failed RPC... but if there are no other RPCs
+    // try to exclude the failed RPCs... but if there are no other RPCs
     // available, we have no choice except to try again with the failed one
-    if (failedProvider) {
-      validRPCs = networkRPCs.filter(rpc => rpc.url != failedProvider.connection.url)
+    if (uniqueFailedProviderUrls.length > 0) {
+      validRPCs = networkRPCs.filter(rpc => ! uniqueFailedProviderUrls.includes(rpc.url))
     }
     if (validRPCs.length == 0) validRPCs = networkRPCs
   }
@@ -153,7 +151,12 @@ function setByNetwork(mockedProviders) {
 }
 
 // The function handler try block
-async function handleTypeFunction(networkName, provider, prop, arguments, counter = 0) {
+async function handleTypeFunction(networkName, prop, arguments, failedProviders = []) {
+  checkFailLimit(failedProviders)
+
+  const provider = chooseProvider(networkName, prop, arguments[0], failedProviders)
+  // console.log(`--- ${networkName} - ${provider.connection.url} --- method and args: ${prop} ${arguments} --- retries: ${failedProviders.length}`)
+
   try {
     // simulate/return chain id without making an RPC call
     if (prop === 'send' && arguments[0] === 'eth_chainId') {
@@ -184,38 +187,45 @@ async function handleTypeFunction(networkName, provider, prop, arguments, counte
     return result
 
   } catch (e) {
-    const newProvider = getNewProviderOrStopExec(counter, networkName, prop, provider)
-    return handleTypeFunction(networkName, newProvider, prop, arguments, counter++)
+    lowerProviderRating(networkName, provider)
+    failedProviders.push(provider)
+    return handleTypeFunction(networkName, prop, arguments, failedProviders)
   }
 }
 
 // The property handler try block.
 // The difference is that the tryBlock is an async function while this one is not
-function handleTypeProp(networkName, provider, prop, arguments, counter = 0) {
+function handleTypeProp(networkName, prop, arguments, failedProviders = []) {
+  checkFailLimit(failedProviders)
+
+  const provider = chooseProvider(networkName, prop, arguments[0], failedProviders)
+  // console.log(`--- ${networkName} - ${provider.connection.url} --- property: ${prop} --- retries: ${failedProviders.length}`)
+
   try {
     result = provider[prop]
     logCall(provider, prop, arguments, false, result)
     return result
   } catch (e) {
-    const newProvider = getNewProviderOrStopExec(counter, networkName, prop, provider)
-    return handleTypeProp(networkName, newProvider, prop, arguments, counter++)
+    lowerProviderRating(networkName, provider)
+    failedProviders.push(provider)
+    return handleTypeProp(networkName, prop, arguments, failedProviders)
   }
 }
 
-function getNewProviderOrStopExec(counter, networkName, prop, provider) {
+function checkFailLimit(failedProviders) {
   // MAX: the number of fallbacks we want to have
-  if (counter >= 1) {
+  if (failedProviders.length > 1) {
     throw e;
   }
+}
 
+function lowerProviderRating(networkName, provider) {
   // lower the rating
   byNetwork[networkName].map((object, index) => {
     if (object.url == provider.connection.url) {
       byNetwork[networkName][index].rating = byNetwork[networkName][index].rating - 1
     }
   })
-
-  return chooseProvider(networkName, prop, arguments[0], provider)
 }
 
 init()
