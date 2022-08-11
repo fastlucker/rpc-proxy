@@ -44,4 +44,65 @@ module.exports = {
         ],
         chainId: 42161
     },
+    andromeda: {
+        RPCs: [
+            {url: 'https://andromeda.metis.io/?owner=1088', tags: []},
+            {url: 'wss://andromeda-ws.metis.io', tags: ['getLogs','eth_getLogs']}
+        ],
+        chainId: 1088,
+    },
+    moonbeam: {
+        RPCs: [
+            {url: 'https://rpc.api.moonbeam.network', tags: []},
+            // {url: 'wss://wss.api.moonbeam.network', tags: ['getLogs','eth_getLogs']}
+        ],
+        chainId: 1284,
+    },
+    moonriver: {
+        RPCs: [
+            {url: 'https://rpc.api.moonriver.moonbeam.network', tags: []},
+            // {url: 'wss://wss.api.moonriver.moonbeam.network', tags: ['getLogs','eth_getLogs']}
+        ],
+        chainId: 1285,
+    },
+    gnosis: {
+        RPCs: [
+            // {url: 'https://rpc.xdaichain.com', tags: []},
+            {url: 'https://rpc.ankr.com/gnosis', tags: []}
+        ],
+        chainId: 100,
+    },
+    kucoin: {
+        RPCs: [
+            {url: 'https://rpc-mainnet.kcc.network', tags: []}
+        ],
+        chainId: 321,
+    },
+    // cronos: {
+    //     RPCs: [
+    //         {url: 'https://evm-cronos.crypto.org', tags: []}
+    //     ],
+    //     chainId: 25,
+    // },
+    // aurora: {
+    //     RPCs: [
+    //         {url: 'https://mainnet.aurora.dev', tags: []}
+    //     ],
+    //     chainId: 1313161554,
+    // },
+    optimism: {
+        RPCs: [
+            {url: 'https://opt-mainnet.g.alchemy.com/v2/hvvwJis8HBKJ9mph_kr7nJ7Dnh0so5Nf', tags: []},
+            {url: 'https://mainnet.optimism.io', tags: []},
+            {url: 'https://opt-mainnet.g.alchemy.com/v2/M8cu_wg-pwr068v3-ZpKW7M7sVX-9tuf', tags: []},
+        ],
+        chainId: 10,
+    },
+    rinkeby: {
+        RPCs: [
+            {url: 'https://rinkeby.infura.io/v3/3d22938fd7dd41b7af4197752f83e8a1', tags: ['getLogs','eth_getLogs']},
+            {url: 'https://eth-rinkeby.alchemyapi.io/v2/QxAJDqLUhBsfBDV812ReCX4Yk4iMvLRu', tags: []},
+        ],
+        chainId: 4,
+    }
   }
