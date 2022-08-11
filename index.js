@@ -47,6 +47,7 @@ function init () {
       byNetwork[network].push({
         url: providerUrl,
         provider: provider,
+        tags: providerInfo['tags'],
         rating: 100
       })
     }
@@ -82,7 +83,7 @@ function chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, 
   // if found in all providers, rotate
   // if found in 0 < x < max providers, set one of those providers
 
-  const networkRPCs = providers[networkName]['RPCs']
+  const networkRPCs = byNetwork[networkName]
 
   let validRPCs = networkRPCs.filter(i => i['tags'].includes(propertyOrMethod))
   if (validRPCs.length == 0 && propertyOrMethod == 'send') {
@@ -128,6 +129,8 @@ function getProvidersWithHighestRating(singleNetworkProviders) {
   const sorted = singleNetworkProviders.sort(function(a, b) {
     return b.rating - a.rating
   })
+
+  // console.log(`--- ratings: ${sorted.map(p => `(url: ${p.url}, rating: ${p.rating})`)}`)
   const highest = sorted[0].rating
   return sorted.filter(one => {
     return one.rating == highest
