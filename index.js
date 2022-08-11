@@ -36,16 +36,6 @@ function init () {
         // provider.on('error', function (e) {
         //   console.error(`[${new Date().toLocaleString()}] RPC "[${providerUrl}]" return error`, e)
         // })
-
-        // if there is an error in debug, lower the rating of the RPC that has an error
-        // provider.on('debug', function (e) {
-        //   if (e.error) {
-        //     const errorNetwork = e.provider._network.network
-        //     const errorProviderUrl = e.provider.connection.url
-
-        //     byNetwork[errorNetwork].filter(i => i.url == errorProviderUrl)[0].rating--
-        //   }
-        // })
       }
 
       if (provider && provider._websocket && provider._websocket.on) {
@@ -63,7 +53,7 @@ function init () {
   }
 }
 
-function getProvider(networkName, chainId) {
+function getProvider(networkName) {
   if (! byNetwork[networkName]) return null
 
   return new Proxy({}, {
@@ -162,42 +152,36 @@ function setByNetwork(mockedProviders) {
   return mockedProviders
 }
 
+// The function handler try block
 async function tryBlock(networkName, provider, prop, arguments, counter = 0) {
   try {
-
-    // function handler
-    if (typeof(provider[prop]) == 'function') {
-
-      // simulate/return chain id without making an RPC call
-      if (prop === 'send' && arguments[0] === 'eth_chainId') {
-        result = `0x${provider._network.chainId.toString(16)}`
-        logCall(provider, prop, arguments, true, result)
-        return result
-      }
-
-      // #buggy: fixup argument if 'getBlock' or 'getBlockWithTransactions' are called
-      // related to this discussion: https://github.com/ethers-io/ethers.js/discussions/3072
-      if (['getBlock', 'getBlockWithTransactions'].includes(prop)) {
-        arguments[0] = arguments[0] == -1 ? 'latest' : arguments[0]
-      }
-
-      result = provider[prop]( ...arguments )
-
-      if (typeof result === 'object' && typeof result.then === 'function') {
-
-        if (networkName == 'polygon' && prop == 'send' && arguments[0] === 'eth_sendRawTransaction') {
-          console.log('FOR eth_sendRawTransaction: ' + provider.connection.url)
-        }
-
-        result = await result
-        logCall(provider, prop, arguments, false, result)
-        return new Promise(resolve => resolve(result))
-      }
-      logCall(provider, prop, arguments, false, result)
+    // simulate/return chain id without making an RPC call
+    if (prop === 'send' && arguments[0] === 'eth_chainId') {
+      result = `0x${provider._network.chainId.toString(16)}`
+      logCall(provider, prop, arguments, true, result)
       return result
     }
 
-    // "other" handler
+    // #buggy: fixup argument if 'getBlock' or 'getBlockWithTransactions' are called
+    // related to this discussion: https://github.com/ethers-io/ethers.js/discussions/3072
+    if (['getBlock', 'getBlockWithTransactions'].includes(prop)) {
+      arguments[0] = arguments[0] == -1 ? 'latest' : arguments[0]
+    }
+
+    result = provider[prop]( ...arguments )
+
+    if (typeof result === 'object' && typeof result.then === 'function') {
+
+      if (networkName == 'polygon' && prop == 'send' && arguments[0] === 'eth_sendRawTransaction') {
+        console.log('FOR eth_sendRawTransaction: ' + provider.connection.url)
+      }
+
+      result = await result
+      logCall(provider, prop, arguments, false, result)
+      return new Promise(resolve => resolve(result))
+    }
+    logCall(provider, prop, arguments, false, result)
+    return result
 
   } catch (e) {
     const newProvider = getNewProviderOrStopExec(counter, networkName, prop, provider)
@@ -205,6 +189,8 @@ async function tryBlock(networkName, provider, prop, arguments, counter = 0) {
   }
 }
 
+// The property handler try block.
+// The difference is that the tryBlock is an async function while this one is not
 function tryBlock2(networkName, provider, prop, arguments, counter = 0) {
   try {
     result = provider[prop]
