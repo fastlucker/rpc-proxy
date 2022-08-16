@@ -28,22 +28,7 @@ function init () {
     for (let providerInfo of providers[network]['RPCs']) {
       const connectionParams = {timeout: 3000, throttleLimit: 2, throttleSlotInterval: 10}
       const providerUrl = providerInfo['url']
-      const provider = providerUrl.startsWith('wss:')
-        ? new WebSocketProvider({url: providerUrl, ...connectionParams}, { network, chainId })
-        : new StaticJsonRpcProvider({url: providerUrl, ...connectionParams}, { network, chainId })
-
-      if (provider) {
-        // provider.on('error', function (e) {
-        //   console.error(`[${new Date().toLocaleString()}] RPC "[${providerUrl}]" return error`, e)
-        // })
-      }
-
-      if (provider && provider._websocket && provider._websocket.on) {
-        provider._websocket.on('error', function (e) {
-          console.error(`[${new Date().toLocaleString()}] provider RPC "[${providerUrl}]" return socket error`, e)
-        })
-      }
-
+      const provider = connect(providerUrl, connectionParams, network, chainId)
       byNetwork[network].push({
         url: providerUrl,
         provider: provider,
@@ -52,6 +37,46 @@ function init () {
       })
     }
   }
+}
+
+function connect(providerUrl, connectionParams, network, chainId) {
+  let provider = null
+
+  if (providerUrl.startsWith('wss:')) {
+    provider = new WebSocketProvider({url: providerUrl, ...connectionParams}, { network, chainId })
+
+    provider._websocket.onclose = function() {
+      // console.log('ON CLOSE JUST HAPPENED')
+
+      const reconnect = () => byNetwork[network].map((info, index) => {
+        if (info.url == providerUrl) {
+          byNetwork[network][index].provider = connect(providerUrl, connectionParams, network, chainId)
+        }
+      })
+
+      setTimeout(function() {
+        // console.log('RECONNECTING TO ' + providerUrl)
+        reconnect();
+      }, 1000);
+    };
+
+    // uncomment the lines below to test reconnect functionality
+    // setTimeout(function() {
+    //   console.log('DESTROYED: ' + providerUrl)
+    //   provider.destroy()
+    // }, 15000);
+  }
+  else {
+    provider = new StaticJsonRpcProvider({url: providerUrl, ...connectionParams}, { network, chainId })
+  }
+
+  if (provider && provider._websocket && provider._websocket.on) {
+    provider._websocket.on('error', function (e) {
+      console.error(`[${new Date().toLocaleString()}] provider RPC "[${providerUrl}]" return socket error`, e)
+    })
+  }
+
+  return provider
 }
 
 function getProvider(networkName) {
