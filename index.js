@@ -155,8 +155,6 @@ function setByNetwork(mockedProviders) {
 
 // The function handler try block
 async function handleTypeFunction(networkName, prop, arguments, failedProviders = []) {
-  checkFailLimit(failedProviders)
-
   const provider = chooseProvider(networkName, prop, arguments[0], failedProviders)
   // console.log(`--- ${networkName} - ${provider.connection.url} --- method and args: ${prop} ${arguments} --- retries: ${failedProviders.length}`)
 
@@ -192,6 +190,7 @@ async function handleTypeFunction(networkName, prop, arguments, failedProviders 
   } catch (e) {
     lowerProviderRating(networkName, provider)
     failedProviders.push(provider)
+    checkFailLimit(e, failedProviders)
     return handleTypeFunction(networkName, prop, arguments, failedProviders)
   }
 }
@@ -199,8 +198,6 @@ async function handleTypeFunction(networkName, prop, arguments, failedProviders 
 // The property handler try block.
 // The difference is that the tryBlock is an async function while this one is not
 function handleTypeProp(networkName, prop, arguments, failedProviders = []) {
-  checkFailLimit(failedProviders)
-
   const provider = chooseProvider(networkName, prop, arguments[0], failedProviders)
   // console.log(`--- ${networkName} - ${provider.connection.url} --- property: ${prop} --- retries: ${failedProviders.length}`)
 
@@ -211,11 +208,12 @@ function handleTypeProp(networkName, prop, arguments, failedProviders = []) {
   } catch (e) {
     lowerProviderRating(networkName, provider)
     failedProviders.push(provider)
+    checkFailLimit(e, failedProviders)
     return handleTypeProp(networkName, prop, arguments, failedProviders)
   }
 }
 
-function checkFailLimit(failedProviders) {
+function checkFailLimit(e, failedProviders) {
   // MAX: the number of fallbacks we want to have
   if (failedProviders.length > 1) {
     throw e;
