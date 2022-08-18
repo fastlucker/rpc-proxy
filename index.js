@@ -184,6 +184,16 @@ function setByNetwork(mockedProviders) {
 
 // The function handler try block
 async function handleTypeFunction(networkName, prop, arguments, failedProviders = []) {
+  // special treatment for these methods calls, related to event subscribe/unsubscribe
+  if (['on', 'once', 'off'].includes(prop)) {
+    const _providers = byNetwork[networkName].map(p => p.provider)
+    for (const _provider of _providers) {
+      _provider[prop]( ...arguments )
+      logCall(_provider, prop, arguments)
+    }
+    return
+  }
+
   const provider = chooseProvider(networkName, prop, arguments[0], failedProviders)
   // console.log(`--- ${networkName} - ${provider.connection.url} --- method and args: ${prop} ${arguments} --- retries: ${failedProviders.length}`)
 
