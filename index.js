@@ -1,4 +1,5 @@
 const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
+const { Logger } = require('@ethersproject/logger')
 
 const providers = require('./providers')
 
@@ -7,7 +8,7 @@ const byNetworkCounter = {}
 let callCount = 0
 const callLog = []
 
-function logCall(provider, propertyOrMethod, arguments, cached, res) {
+function logCall(provider, propertyOrMethod, arguments, cached = false, res = null) {
   callLog.push({
     id: callCount,
     providerUrl: provider ? provider.connection.url : null,
@@ -93,6 +94,9 @@ function getProvider(networkName) {
       }
 
       return handleTypeProp(networkName, prop, arguments)
+    },
+    set: function(target, prop, value) {
+      return handleTypePropSet(networkName, prop, value)
     }
   })
 }
@@ -235,6 +239,21 @@ function handleTypeProp(networkName, prop, arguments, failedProviders = []) {
     failedProviders.push(provider)
     checkFailLimit(e, failedProviders)
     return handleTypeProp(networkName, prop, arguments, failedProviders)
+  }
+}
+
+function handleTypePropSet(networkName, prop, value) {
+  // when setting a property, we would want to set it to all providers for this network
+  const _providers = byNetwork[networkName].map(p => p.provider)
+  for (const _provider of _providers) {
+    try {
+      _provider[prop] = value
+      logCall(_provider, prop, value)
+    } catch (e) {
+      // not all provider types support all properties, so this is an expected error
+      if (e.code === Logger.errors.UNSUPPORTED_OPERATION) continue
+      throw e
+    }
   }
 }
 
