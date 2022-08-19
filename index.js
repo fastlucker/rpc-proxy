@@ -1,8 +1,7 @@
 const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
 const { Logger } = require('@ethersproject/logger')
 
-const providers = require('./providers')
-
+let providersConfig = {}
 const byNetwork = {}
 const byNetworkCounter = {}
 let callCount = 0
@@ -20,13 +19,15 @@ function logCall(provider, propertyOrMethod, arguments, cached = false, res = nu
   callCount++
 }
 
-function init () {
-  for (const network in providers) {
-    const chainId = providers[network]['chainId']
+function init (_providersConfig) {
+  providersConfig = _providersConfig
+
+  for (const network in providersConfig) {
+    const chainId = providersConfig[network]['chainId']
     byNetwork[network] = []
     byNetworkCounter[network] = 1
 
-    for (let providerInfo of providers[network]['RPCs']) {
+    for (let providerInfo of providersConfig[network]['RPCs']) {
       const connectionParams = {timeout: 3000, throttleLimit: 2, throttleSlotInterval: 10}
       const providerUrl = providerInfo['url']
       const provider = connect(providerUrl, connectionParams, network, chainId)
@@ -81,6 +82,7 @@ function connect(providerUrl, connectionParams, network, chainId) {
 }
 
 function getProvider(networkName) {
+  if (Object.keys(providersConfig).length === 0 || Object.keys(byNetwork).length === 0) throw new Error('CustomRPC not initialized')
   if (! byNetwork[networkName]) return null
 
   return new Proxy({}, {
@@ -169,7 +171,7 @@ function getProvidersWithHighestRating(singleNetworkProviders) {
 function getCurrentProviderIndex (network, filteredProviders = []) {
   const finalProviders = filteredProviders.length
     ? filteredProviders
-    : providers[network]['RPCs']
+    : providersConfig[network]['RPCs']
 
   return byNetworkCounter[network] % finalProviders.length
 }
@@ -283,6 +285,4 @@ function lowerProviderRating(networkName, provider) {
   })
 }
 
-init()
-
-module.exports = { getProvider, callLog, getByNetwork, setByNetwork }
+module.exports = { init, getProvider, callLog, getByNetwork, setByNetwork }
