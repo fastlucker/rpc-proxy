@@ -6,6 +6,7 @@ const byNetwork = {}
 const byNetworkCounter = {}
 let callCount = 0
 const callLog = []
+const connectionParams = {timeout: 3000, throttleLimit: 2, throttleSlotInterval: 10}
 
 function logCall(provider, propertyOrMethod, arguments, cached = false, res = null) {
   callLog.push({
@@ -28,49 +29,23 @@ function init (_providersConfig) {
     byNetworkCounter[network] = 1
 
     for (let providerInfo of providersConfig[network]['RPCs']) {
-      const connectionParams = {timeout: 3000, throttleLimit: 2, throttleSlotInterval: 10}
       const providerUrl = providerInfo['url']
       const provider = connect(providerUrl, connectionParams, network, chainId)
       byNetwork[network].push({
         url: providerUrl,
         provider: provider,
         tags: providerInfo['tags'],
-        rating: 100
+        rating: 100,
+        chainId: chainId
       })
     }
   }
 }
 
 function connect(providerUrl, connectionParams, network, chainId) {
-  let provider = null
-
-  if (providerUrl.startsWith('wss:')) {
-    provider = new WebSocketProvider({url: providerUrl, ...connectionParams}, { network, chainId })
-
-    provider._websocket.onclose = function() {
-      // console.log('ON CLOSE JUST HAPPENED')
-
-      const reconnect = () => byNetwork[network].map((info, index) => {
-        if (info.url == providerUrl) {
-          byNetwork[network][index].provider = connect(providerUrl, connectionParams, network, chainId)
-        }
-      })
-
-      setTimeout(function() {
-        // console.log('RECONNECTING TO ' + providerUrl)
-        reconnect();
-      }, 1000);
-    };
-
-    // uncomment the lines below to test reconnect functionality
-    // setTimeout(function() {
-    //   console.log('DESTROYED: ' + providerUrl)
-    //   provider.destroy()
-    // }, 15000);
-  }
-  else {
-    provider = new StaticJsonRpcProvider({url: providerUrl, ...connectionParams}, { network, chainId })
-  }
+  const provider = providerUrl.startsWith('wss:')
+    ? new WebSocketProvider({url: providerUrl, ...connectionParams}, { network, chainId })
+    : new StaticJsonRpcProvider({url: providerUrl, ...connectionParams}, { network, chainId })
 
   if (provider && provider._websocket && provider._websocket.on) {
     provider._websocket.on('error', function (e) {
@@ -87,6 +62,17 @@ function getProvider(networkName) {
 
   return new Proxy({}, {
     get: function get(target, prop, receiver) {
+
+      if (prop == 'restart') {
+        console.log(`[${new Date().toLocaleString()}] restarted`)
+
+        // restart all the providers in the network
+        byNetwork[networkName].map((info, index) => {
+          byNetwork[networkName][index].provider = connect(info.url, connectionParams, networkName, info.chainId)
+        })
+        return
+      }
+
       // target only the send function as the send function
       // is the one calling eth_call, eth_sendTransaction
       if (typeof(byNetwork[networkName][0].provider[prop]) == 'function') {
