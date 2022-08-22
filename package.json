@@ -21,6 +21,7 @@
   },
   "homepage": "https://github.com/AmbireTech/custom-rpc#readme",
   "dependencies": {
-    "ethers": "^5.5.2"
+    "ethers": "^5.5.2",
+    "redis": "^3.1.2"
   }
 }

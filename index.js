@@ -1,5 +1,8 @@
 const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
 const { Logger } = require('@ethersproject/logger')
+const redis = require("redis");
+const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
+const redisClient = redis.createClient(redisUrl);
 
 let providersConfig = {}
 const byNetwork = {}
@@ -31,12 +34,18 @@ function init (_providersConfig) {
     for (let providerInfo of providersConfig[network]['RPCs']) {
       const providerUrl = providerInfo['url']
       const provider = connect(providerUrl, connectionParams, network, chainId)
-      byNetwork[network].push({
-        url: providerUrl,
-        provider: provider,
-        tags: providerInfo['tags'],
-        rating: 100,
-        chainId: chainId
+      redisClient.get(providerUrl, function(err, value) {
+        if (! value) {
+          redisClient.set(providerUrl, 100);
+        }
+
+        byNetwork[network].push({
+          url: providerUrl,
+          provider: provider,
+          tags: providerInfo['tags'],
+          rating: value ? value : 100,
+          chainId: chainId
+        })
       })
     }
   }
@@ -267,6 +276,7 @@ function lowerProviderRating(networkName, provider) {
   byNetwork[networkName].map((object, index) => {
     if (object.url == provider.connection.url) {
       byNetwork[networkName][index].rating = byNetwork[networkName][index].rating - 1
+      redisClient.set(provider.connection.url, byNetwork[networkName][index].rating);
     }
   })
 }
