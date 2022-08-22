@@ -10,6 +10,7 @@ const byNetworkCounter = {}
 let callCount = 0
 let callLog = []
 const connectionParams = {timeout: 3000, throttleLimit: 2, throttleSlotInterval: 10}
+const byNetworkLatestBlock = {}
 
 function logCall(provider, propertyOrMethod, arguments, cached = false, res = null) {
   callLog.push({
@@ -31,6 +32,7 @@ function init (_providersConfig) {
     const chainId = providersConfig[network]['chainId']
     byNetwork[network] = []
     byNetworkCounter[network] = 1
+    byNetworkLatestBlock[network] = 0
 
     for (let providerInfo of providersConfig[network]['RPCs']) {
       const providerUrl = providerInfo['url']
@@ -47,6 +49,13 @@ function init (_providersConfig) {
           rating: value ? value : 100,
           chainId: chainId
         })
+      })
+
+      provider.on('block', async function (blockNum) {
+        if (blockNum <= byNetworkLatestBlock[network]) return
+
+        byNetworkLatestBlock[network] = blockNum
+        provider.emit('latest-block', blockNum)
       })
     }
   }
