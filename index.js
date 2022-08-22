@@ -8,7 +8,7 @@ let providersConfig = {}
 const byNetwork = {}
 const byNetworkCounter = {}
 let callCount = 0
-const callLog = []
+let callLog = []
 const connectionParams = {timeout: 3000, throttleLimit: 2, throttleSlotInterval: 10}
 
 function logCall(provider, propertyOrMethod, arguments, cached = false, res = null) {
@@ -21,6 +21,7 @@ function logCall(provider, propertyOrMethod, arguments, cached = false, res = nu
     response: res
   })
   callCount++
+  callLog = callLog.length > 50 ? callLog.slice(-50) : callLog
 }
 
 function init (_providersConfig) {
