@@ -1,8 +1,33 @@
 const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
 const { Logger } = require('@ethersproject/logger')
+const { promisify } = require("util");
 const redis = require("redis");
 const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
 const redisClient = redis.createClient(redisUrl);
+const defaultRating = 100
+
+//.: Activate "notify-keyspace-events" for expired type events
+redisClient.send_command('config', ['set','notify-keyspace-events','Ex'], SubscribeExpired)
+
+//.: Subscribe to the "notify-keyspace-events" channel used for expired type events
+function SubscribeExpired(e,r){
+ const redisClientSub = redis.createClient(redisUrl);
+ const expired_subKey = '__keyevent@0__:expired'
+ redisClientSub.subscribe(expired_subKey, function(){
+  console.log(' [i] Subscribed to "'+expired_subKey+'" event channel : '+r)
+  redisClientSub.on('message', function (chan,msg){
+    if (! msg.includes('_split_key_here_')) {
+      return
+    }
+
+    const network = msg.split('_split_key_here_')[0]
+    const url = msg.split('_split_key_here_')[1]
+    console.log('[expired]', 'Network: ' + network, 'Provider: ' + url)
+
+    byNetwork[network].filter(info => info.url == url)[0].rating = defaultRating
+  })
+ })
+}
 
 let providersConfig = {}
 const byNetwork = {}
@@ -37,18 +62,21 @@ function init (_providersConfig) {
     for (let providerInfo of providersConfig[network]['RPCs']) {
       const providerUrl = providerInfo['url']
       const provider = connect(providerUrl, connectionParams, network, chainId)
-      redisClient.get(providerUrl, function(err, value) {
-        if (! value) {
-          redisClient.set(providerUrl, 100);
-        }
 
-        byNetwork[network].push({
-          url: providerUrl,
-          provider: provider,
-          tags: providerInfo['tags'],
-          rating: value ? value : 100,
-          chainId: chainId
-        })
+      byNetwork[network].push({
+        url: providerUrl,
+        provider: provider,
+        tags: providerInfo['tags'],
+        chainId: chainId,
+        rating: defaultRating
+      })
+
+      // this is async, will not load immediatelly.
+      // If there is a cached rating for the provider, set it
+      redisClient.get(getRatingKey(network, providerUrl), function (err, value) {
+        if (!value) return
+
+        byNetwork[network].filter(info => info.url == providerUrl)[0].rating = value
       })
 
       provider.on('block', async function (blockNum) {
@@ -286,9 +314,20 @@ function lowerProviderRating(networkName, provider) {
   byNetwork[networkName].map((object, index) => {
     if (object.url == provider.connection.url) {
       byNetwork[networkName][index].rating = byNetwork[networkName][index].rating - 1
-      redisClient.set(provider.connection.url, byNetwork[networkName][index].rating);
+
+      redisClient.set(
+        getRatingKey(networkName, provider.connection.url),
+        byNetwork[networkName][index].rating,
+        'EX',
+        60 * 5
+      );
     }
   })
+}
+
+// get the key we are using in redis for the rating
+function getRatingKey(network, url) {
+  return network + '_split_key_here_' + url
 }
 
 module.exports = { init, getProvider, callLog, getByNetwork, setByNetwork }
