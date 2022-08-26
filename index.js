@@ -6,6 +6,9 @@ const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
 const redisClient = redis.createClient(redisUrl);
 const defaultRating = 100
 
+const defaultConnectionParams = {timeout: 5000, throttleLimit: 2, throttleSlotInterval: 10}
+let finalConnectionParams
+
 //.: Activate "notify-keyspace-events" for expired type events
 redisClient.send_command('config', ['set','notify-keyspace-events','Ex'], SubscribeExpired)
 
@@ -34,7 +37,6 @@ const byNetwork = {}
 const byNetworkCounter = {}
 let callCount = 0
 let callLog = []
-const connectionParams = {timeout: 3000, throttleLimit: 2, throttleSlotInterval: 10}
 const byNetworkLatestBlock = {}
 
 function logCall(provider, propertyOrMethod, arguments, cached = false, res = null) {
@@ -50,8 +52,11 @@ function logCall(provider, propertyOrMethod, arguments, cached = false, res = nu
   callLog = callLog.length > 50 ? callLog.slice(-50) : callLog
 }
 
-function init (_providersConfig) {
+function init (_providersConfig, _connectionParams = {}) {
   providersConfig = _providersConfig
+
+  // override default connection params if provided as input
+  finalConnectionParams = Object.assign(defaultConnectionParams, _connectionParams);
 
   for (const network in providersConfig) {
     const chainId = providersConfig[network]['chainId']
@@ -61,7 +66,7 @@ function init (_providersConfig) {
 
     for (let providerInfo of providersConfig[network]['RPCs']) {
       const providerUrl = providerInfo['url']
-      const provider = connect(providerUrl, connectionParams, network, chainId)
+      const provider = connect(providerUrl, finalConnectionParams, network, chainId)
 
       byNetwork[network].push({
         url: providerUrl,
@@ -115,7 +120,7 @@ function getProvider(networkName) {
 
         // restart all the providers in the network
         byNetwork[networkName].map((info, index) => {
-          byNetwork[networkName][index].provider = connect(info.url, connectionParams, networkName, info.chainId)
+          byNetwork[networkName][index].provider = connect(info.url, finalConnectionParams, networkName, info.chainId)
         })
         return
       }
