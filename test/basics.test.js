@@ -1,5 +1,6 @@
 const customRPC = require('../')
 const assert = require('assert')
+const { delay } = require('./_helper')
 
 let provider
 
@@ -7,7 +8,7 @@ const networks = {
     polygon: {
         RPCs: [
             {url: 'http://url1', tags: ['call','eth_sendRawTransaction']},
-            {url: 'http://url1', tags: ['call']},
+            {url: 'http://url2', tags: ['call']},
             {url: 'wss://url3', tags: ['getLogs','eth_getLogs']},
             {url: 'wss://url4', tags: ['call']},
         ],
@@ -35,28 +36,6 @@ jest.mock('redis', () => {
     }
 })
 
-async function delay(timeout = 50) {
-    return new Promise(resolve => setTimeout(resolve, timeout))
-}
-
-destroyWSSConnections = async providersByNetwork => {
-    let promises = []
-
-    Object.keys(providersByNetwork).forEach(key => {
-        providersByNetwork[key].map(providerInfo => {
-
-            // we do this because wss providers need to be
-            // manually destroyed in order to stop the connection.
-            // this is how web sockets work...
-            if (typeof(providerInfo.provider.destroy) === "function") {
-                promises.push(providerInfo.provider.destroy())
-            }
-        })
-    })
-
-    return Promise.all(promises)
-}
-
 beforeAll(async () => {
     return delay().then(() => {
         customRPC.init(networks)
@@ -68,9 +47,7 @@ afterAll(async () => {
     return delay().then(() => {
         provider.off('block')
     })
-    // const byNetwork = customRPC.getByNetwork()
-    // await destroyWSSConnections(byNetwork)
-});
+})
 
 test('test if chain id is returning cached result', async () => {
 	const result1 = await provider.send('eth_chainId', [ ])
