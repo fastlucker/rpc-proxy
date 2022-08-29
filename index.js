@@ -39,12 +39,12 @@ let callCount = 0
 let callLog = []
 const byNetworkLatestBlock = {}
 
-function logCall(provider, propertyOrMethod, arguments, cached = false, res = null) {
+function logCall(provider, propertyOrMethod, args, cached = false, res = null) {
   callLog.push({
     id: callCount,
     providerUrl: provider ? provider.connection.url : null,
     propertyOrMethod: propertyOrMethod,
-    args: arguments,
+    args: args,
     cached: cached,
     response: res
   })
@@ -223,72 +223,72 @@ function setByNetwork(mockedProviders) {
 }
 
 // The function handler try block
-async function handleTypeFunction(networkName, prop, arguments, failedProviders = []) {
+async function handleTypeFunction(networkName, prop, args, failedProviders = []) {
   // special treatment for these methods calls, related to event subscribe/unsubscribe
   if (['on', 'once', 'off'].includes(prop)) {
     const _providers = byNetwork[networkName].map(p => p.provider)
     for (const _provider of _providers) {
-      _provider[prop]( ...arguments )
-      logCall(_provider, prop, arguments)
+      _provider[prop]( ...args )
+      logCall(_provider, prop, args)
     }
     return
   }
 
-  const provider = chooseProvider(networkName, prop, arguments[0], failedProviders)
-  // console.log(`--- ${networkName} - ${provider.connection.url} --- method and args: ${prop} ${arguments} --- retries: ${failedProviders.length}`)
+  const provider = chooseProvider(networkName, prop, args[0], failedProviders)
+  // console.log(`--- ${networkName} - ${provider.connection.url} --- method and args: ${prop} ${args} --- retries: ${failedProviders.length}`)
 
   try {
     // simulate/return chain id without making an RPC call
-    if (prop === 'send' && arguments[0] === 'eth_chainId') {
+    if (prop === 'send' && args[0] === 'eth_chainId') {
       result = `0x${provider._network.chainId.toString(16)}`
-      logCall(provider, prop, arguments, true, result)
+      logCall(provider, prop, args, true, result)
       return result
     }
 
     // #buggy: fixup argument if 'getBlock' or 'getBlockWithTransactions' are called
     // related to this discussion: https://github.com/ethers-io/ethers.js/discussions/3072
     if (['getBlock', 'getBlockWithTransactions'].includes(prop)) {
-      arguments[0] = arguments[0] == -1 ? 'latest' : arguments[0]
+      args[0] = args[0] == -1 ? 'latest' : args[0]
     }
 
-    result = provider[prop]( ...arguments )
+    result = provider[prop]( ...args )
 
     if (typeof result === 'object' && typeof result.then === 'function') {
 
-      if (networkName == 'polygon' && prop == 'send' && arguments[0] === 'eth_sendRawTransaction') {
+      if (networkName == 'polygon' && prop == 'send' && args[0] === 'eth_sendRawTransaction') {
         console.log('FOR eth_sendRawTransaction: ' + provider.connection.url)
       }
 
       result = await result
-      logCall(provider, prop, arguments, false, result)
+      logCall(provider, prop, args, false, result)
       return new Promise(resolve => resolve(result))
     }
-    logCall(provider, prop, arguments, false, result)
+    logCall(provider, prop, args, false, result)
     return result
 
   } catch (e) {
     lowerProviderRating(networkName, provider)
     failedProviders.push(provider)
     checkFailLimit(e, failedProviders)
-    return handleTypeFunction(networkName, prop, arguments, failedProviders)
+    return handleTypeFunction(networkName, prop, args, failedProviders)
   }
 }
 
 // The property handler try block.
 // The difference is that the tryBlock is an async function while this one is not
-function handleTypeProp(networkName, prop, arguments, failedProviders = []) {
-  const provider = chooseProvider(networkName, prop, arguments[0], failedProviders)
+function handleTypeProp(networkName, prop, args, failedProviders = []) {
+  const provider = chooseProvider(networkName, prop, args[0], failedProviders)
   // console.log(`--- ${networkName} - ${provider.connection.url} --- property: ${prop} --- retries: ${failedProviders.length}`)
 
   try {
     result = provider[prop]
-    logCall(provider, prop, arguments, false, result)
+    logCall(provider, prop, args, false, result)
     return result
   } catch (e) {
     lowerProviderRating(networkName, provider)
     failedProviders.push(provider)
     checkFailLimit(e, failedProviders)
-    return handleTypeProp(networkName, prop, arguments, failedProviders)
+    return handleTypeProp(networkName, prop, args, failedProviders)
   }
 }
 
