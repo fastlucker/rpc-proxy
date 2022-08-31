@@ -1,6 +1,6 @@
 // define a cacheable DNS lookup for all the requests in the app
-const http = require('http');
-const https = require('https');
+const http = require('http')
+const https = require('https')
 const { URL } = require('url')
 const CacheableLookup = require('cacheable-lookup');
 
@@ -11,13 +11,17 @@ class MyCacheableLookup extends CacheableLookup {
         this.cacheableHostnames = cacheableHostnames
     }
 
-    async lookupAsync(hostname, options = {}) {
+    async query(hostname) {
         if (this.cacheableHostnames.includes(hostname)) {
-            return super.lookupAsync(hostname, options)
+            return super.query(hostname)
         }
 
-        // console.log(`--------- LOOKUP ASYNC fallback: ${hostname}`)
-        return this._dnsLookup(hostname, {all: true});
+        // console.log(`--------- LOOKUP no cache for: ${hostname}`)
+        const result = await this._dnsLookup(hostname, {all: true})
+        const source = 'query'
+        return result.map(entry => {
+            return {...entry, source}
+        })
     }
 }
 
