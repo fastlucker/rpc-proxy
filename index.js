@@ -1,7 +1,7 @@
 const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
 const { Logger } = require('@ethersproject/logger')
-const { promisify } = require("util");
-const redis = require("redis");
+const dnslookup = require('./utils/dnslookup')
+const redis = require("redis")
 const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
 const redisClient = redis.createClient(redisUrl);
 const defaultRating = 100
@@ -54,6 +54,8 @@ function logCall(provider, propertyOrMethod, args, cached = false, res = null) {
 
 function init (_providersConfig, _connectionParams = {}) {
   providersConfig = _providersConfig
+
+  dnslookup.init(_providersConfig)
 
   // override default connection params if provided as input
   finalConnectionParams = Object.assign(defaultConnectionParams, _connectionParams);
