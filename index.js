@@ -32,7 +32,6 @@ function SubscribeExpired(e,r){
  })
 }
 
-let providersConfig = {}
 const byNetwork = {}
 const byNetworkCounter = {}
 let callCount = 0
@@ -53,20 +52,18 @@ function logCall(provider, propertyOrMethod, args, cached = false, res = null) {
 }
 
 function init (_providersConfig, _connectionParams = {}) {
-  providersConfig = _providersConfig
-
   dnslookup.init(_providersConfig)
 
   // override default connection params if provided as input
   finalConnectionParams = Object.assign(defaultConnectionParams, _connectionParams);
 
-  for (const network in providersConfig) {
-    const chainId = providersConfig[network]['chainId']
+  for (const network in _providersConfig) {
+    const chainId = _providersConfig[network]['chainId']
     byNetwork[network] = []
     byNetworkCounter[network] = 1
     byNetworkLatestBlock[network] = 0
 
-    for (let providerInfo of providersConfig[network]['RPCs']) {
+    for (let providerInfo of _providersConfig[network]['RPCs']) {
       const providerUrl = providerInfo['url']
       const provider = connect(providerUrl, finalConnectionParams, network, chainId)
 
@@ -111,7 +108,7 @@ function connect(providerUrl, connectionParams, network, chainId) {
 }
 
 function getProvider(networkName) {
-  if (Object.keys(providersConfig).length === 0 || Object.keys(byNetwork).length === 0) throw new Error('CustomRPC not initialized')
+  if (Object.keys(byNetwork).length === 0) throw new Error('CustomRPC not initialized')
   if (! byNetwork[networkName]) return null
 
   return new Proxy({}, {
@@ -211,7 +208,7 @@ function getProvidersWithHighestRating(singleNetworkProviders) {
 function getCurrentProviderIndex (network, filteredProviders = []) {
   const finalProviders = filteredProviders.length
     ? filteredProviders
-    : providersConfig[network]['RPCs']
+    : byNetwork[network]['RPCs']
 
   return byNetworkCounter[network] % finalProviders.length
 }
@@ -229,7 +226,7 @@ async function handleTypeFunction(networkName, prop, args, failedProviders = [])
   }
 
   const provider = chooseProvider(networkName, prop, args[0], failedProviders)
-  // console.log(`--- ${networkName} - ${provider.connection.url} --- method and args: ${prop} ${args} --- retries: ${failedProviders.length}`)
+  console.log(`--- ${networkName} - ${provider.connection.url} --- method and args: ${prop} ${args} --- retries: ${failedProviders.length}`)
 
   try {
     // simulate/return chain id without making an RPC call
@@ -272,7 +269,7 @@ async function handleTypeFunction(networkName, prop, args, failedProviders = [])
 // The difference is that the tryBlock is an async function while this one is not
 function handleTypeProp(networkName, prop, args, failedProviders = []) {
   const provider = chooseProvider(networkName, prop, args[0], failedProviders)
-  // console.log(`--- ${networkName} - ${provider.connection.url} --- property: ${prop} --- retries: ${failedProviders.length}`)
+  console.log(`--- ${networkName} - ${provider.connection.url} --- property: ${prop} --- retries: ${failedProviders.length}`)
 
   try {
     result = provider[prop]
