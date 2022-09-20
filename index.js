@@ -1,4 +1,3 @@
-const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
 const { Logger } = require('@ethersproject/logger')
 const providerStore = require('./provider-store')
 const dnslookup = require('./utils/dnslookup')
@@ -64,7 +63,7 @@ function init (_providersConfig, _connectionParams = {}) {
 
     for (let providerInfo of _providersConfig[network]['RPCs']) {
       const providerUrl = providerInfo['url']
-      const provider = connect(providerUrl, finalConnectionParams, network, chainId)
+      const provider = providerStore.connect(providerUrl, network, chainId, finalConnectionParams)
 
       providerStore.byNetwork[network].push({
         url: providerUrl,
@@ -92,20 +91,6 @@ function init (_providersConfig, _connectionParams = {}) {
   }
 }
 
-function connect(providerUrl, connectionParams, network, chainId) {
-  const provider = providerUrl.startsWith('wss:')
-    ? new WebSocketProvider({url: providerUrl, ...connectionParams}, { network, chainId })
-    : new StaticJsonRpcProvider({url: providerUrl, ...connectionParams}, { network, chainId })
-
-  if (provider && provider._websocket && provider._websocket.on) {
-    provider._websocket.on('error', function (e) {
-      console.error(`[${new Date().toLocaleString()}] provider RPC "[${providerUrl}]" return socket error`, e)
-    })
-  }
-
-  return provider
-}
-
 function getProvider(networkName) {
   if (Object.keys(providerStore.byNetwork).length === 0) throw new Error('CustomRPC not initialized')
   if (! providerStore.byNetwork[networkName]) return null
@@ -117,9 +102,7 @@ function getProvider(networkName) {
         console.log(`[${new Date().toLocaleString()}] restarted`)
 
         // restart all the providers in the network
-        providerStore.byNetwork[networkName].map((info, index) => {
-          providerStore.byNetwork[networkName][index].provider = connect(info.url, finalConnectionParams, networkName, info.chainId)
-        })
+        providerStore.reconnectAllByNetwork(networkName, finalConnectionParams)
         return
       }
 
