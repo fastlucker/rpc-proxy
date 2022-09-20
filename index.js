@@ -1,7 +1,9 @@
 const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
 const { Logger } = require('@ethersproject/logger')
+const providerStore = require('./provider-store')
 const dnslookup = require('./utils/dnslookup')
 const redis = require("redis")
+
 const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
 const redisClient = redis.createClient(redisUrl);
 const defaultRating = 100
@@ -27,16 +29,13 @@ function SubscribeExpired(e,r){
     const url = msg.split('_split_key_here_')[1]
     console.log('[expired]', 'Network: ' + network, 'Provider: ' + url)
 
-    byNetwork[network].filter(info => info.url == url)[0].rating = defaultRating
+    providerStore.byNetwork[network].filter(info => info.url == url)[0].rating = defaultRating
   })
  })
 }
 
-const byNetwork = {}
-const byNetworkCounter = {}
 let callCount = 0
 let callLog = []
-const byNetworkLatestBlock = {}
 
 function logCall(provider, propertyOrMethod, args, cached = false, res = null) {
   callLog.push({
@@ -59,15 +58,15 @@ function init (_providersConfig, _connectionParams = {}) {
 
   for (const network in _providersConfig) {
     const chainId = _providersConfig[network]['chainId']
-    byNetwork[network] = []
-    byNetworkCounter[network] = 1
-    byNetworkLatestBlock[network] = 0
+    providerStore.byNetwork[network] = []
+    providerStore.byNetworkCounter[network] = 1
+    providerStore.byNetworkLatestBlock[network] = 0
 
     for (let providerInfo of _providersConfig[network]['RPCs']) {
       const providerUrl = providerInfo['url']
       const provider = connect(providerUrl, finalConnectionParams, network, chainId)
 
-      byNetwork[network].push({
+      providerStore.byNetwork[network].push({
         url: providerUrl,
         provider: provider,
         tags: providerInfo['tags'],
@@ -80,13 +79,13 @@ function init (_providersConfig, _connectionParams = {}) {
       redisClient.get(getRatingKey(network, providerUrl), function (err, value) {
         if (!value) return
 
-        byNetwork[network].filter(info => info.url == providerUrl)[0].rating = value
+        providerStore.byNetwork[network].filter(info => info.url == providerUrl)[0].rating = value
       })
 
       provider.on('block', async function (blockNum) {
-        if (blockNum <= byNetworkLatestBlock[network]) return
+        if (blockNum <= providerStore.byNetworkLatestBlock[network]) return
 
-        byNetworkLatestBlock[network] = blockNum
+        providerStore.byNetworkLatestBlock[network] = blockNum
         provider.emit('latest-block', blockNum)
       })
     }
@@ -108,8 +107,8 @@ function connect(providerUrl, connectionParams, network, chainId) {
 }
 
 function getProvider(networkName) {
-  if (Object.keys(byNetwork).length === 0) throw new Error('CustomRPC not initialized')
-  if (! byNetwork[networkName]) return null
+  if (Object.keys(providerStore.byNetwork).length === 0) throw new Error('CustomRPC not initialized')
+  if (! providerStore.byNetwork[networkName]) return null
 
   return new Proxy({}, {
     get: function get(target, prop, receiver) {
@@ -118,15 +117,15 @@ function getProvider(networkName) {
         console.log(`[${new Date().toLocaleString()}] restarted`)
 
         // restart all the providers in the network
-        byNetwork[networkName].map((info, index) => {
-          byNetwork[networkName][index].provider = connect(info.url, finalConnectionParams, networkName, info.chainId)
+        providerStore.byNetwork[networkName].map((info, index) => {
+          providerStore.byNetwork[networkName][index].provider = connect(info.url, finalConnectionParams, networkName, info.chainId)
         })
         return
       }
 
       // target only the send function as the send function
       // is the one calling eth_call, eth_sendTransaction
-      if (typeof(byNetwork[networkName][0].provider[prop]) == 'function') {
+      if (typeof(providerStore.byNetwork[networkName][0].provider[prop]) == 'function') {
         return async function() {
           return handleTypeFunction(networkName, prop, arguments)
         }
@@ -151,7 +150,7 @@ function chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, 
   // if found in all providers, rotate
   // if found in 0 < x < max providers, set one of those providers
 
-  const networkRPCs = byNetwork[networkName]
+  const networkRPCs = providerStore.byNetwork[networkName]
 
   let validRPCs = networkRPCs.filter(i => i['tags'].includes(propertyOrMethod))
   if (validRPCs.length == 0 && propertyOrMethod == 'send') {
@@ -186,10 +185,10 @@ function chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, 
 
 function roundRobbinRotate(networkName, singleNetworkRPCs) {
   const currentIndex = getCurrentProviderIndex(networkName, singleNetworkRPCs);
-  byNetworkCounter[networkName]++;
+  providerStore.byNetworkCounter[networkName]++;
 
   const urls = singleNetworkRPCs.map(rpc => rpc.url)
-  return byNetwork[networkName].filter(info => urls.includes(info.url))[currentIndex].provider
+  return providerStore.byNetwork[networkName].filter(info => urls.includes(info.url))[currentIndex].provider
 }
 
 // return only the providers that have the highest rating
@@ -208,16 +207,16 @@ function getProvidersWithHighestRating(singleNetworkProviders) {
 function getCurrentProviderIndex (network, filteredProviders = []) {
   const finalProviders = filteredProviders.length
     ? filteredProviders
-    : byNetwork[network]['RPCs']
+    : providerStore.byNetwork[network]['RPCs']
 
-  return byNetworkCounter[network] % finalProviders.length
+  return providerStore.byNetworkCounter[network] % finalProviders.length
 }
 
 // The function handler try block
 async function handleTypeFunction(networkName, prop, args, failedProviders = []) {
   // special treatment for these methods calls, related to event subscribe/unsubscribe
   if (['on', 'once', 'off'].includes(prop)) {
-    const _providers = byNetwork[networkName].map(p => p.provider)
+    const _providers = providerStore.byNetwork[networkName].map(p => p.provider)
     for (const _provider of _providers) {
       _provider[prop]( ...args )
       logCall(_provider, prop, args)
@@ -285,7 +284,7 @@ function handleTypeProp(networkName, prop, args, failedProviders = []) {
 
 function handleTypePropSet(networkName, prop, value) {
   // when setting a property, we would want to set it to all providers for this network
-  const _providers = byNetwork[networkName].map(p => p.provider)
+  const _providers = providerStore.byNetwork[networkName].map(p => p.provider)
   for (const _provider of _providers) {
     try {
       _provider[prop] = value
@@ -307,13 +306,13 @@ function checkFailLimit(e, failedProviders) {
 
 function lowerProviderRating(networkName, provider) {
   // lower the rating
-  byNetwork[networkName].map((object, index) => {
+  providerStore.byNetwork[networkName].map((object, index) => {
     if (object.url == provider.connection.url) {
-      byNetwork[networkName][index].rating = byNetwork[networkName][index].rating - 1
+      providerStore.byNetwork[networkName][index].rating = providerStore.byNetwork[networkName][index].rating - 1
 
       redisClient.set(
         getRatingKey(networkName, provider.connection.url),
-        byNetwork[networkName][index].rating,
+        providerStore.byNetwork[networkName][index].rating,
         'EX',
         60 * 5
       );
