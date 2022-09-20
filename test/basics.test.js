@@ -19,6 +19,7 @@ const networks = {
 const network = 'polygon'
 const chainId = networks[network].chainId
 
+jest.mock('cacheable-lookup')
 jest.mock('http')
 jest.mock('https')
 jest.mock('ws')

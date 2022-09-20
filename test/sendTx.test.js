@@ -17,6 +17,7 @@ const networks = {
     }
 }
 
+jest.mock('cacheable-lookup')
 jest.mock('http')
 jest.mock('https')
 jest.mock('ws')
