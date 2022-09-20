@@ -216,14 +216,6 @@ function getCurrentProviderIndex (network, filteredProviders = []) {
   return byNetworkCounter[network] % finalProviders.length
 }
 
-function getByNetwork() {
-  return byNetwork
-}
-
-function setByNetwork(mockedProviders) {
-  return mockedProviders
-}
-
 // The function handler try block
 async function handleTypeFunction(networkName, prop, args, failedProviders = []) {
   // special treatment for these methods calls, related to event subscribe/unsubscribe
@@ -337,4 +329,4 @@ function getRatingKey(network, url) {
   return network + '_split_key_here_' + url
 }
 
-module.exports = { init, getProvider, callLog, getByNetwork, setByNetwork }
+module.exports = { init, getProvider, callLog }
