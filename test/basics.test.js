@@ -1,4 +1,5 @@
 const customRPC = require('../')
+const rpcCallLogger = require('./../loggers/rpc-calls')
 const assert = require('assert')
 const { delay } = require('./_helper')
 
@@ -53,12 +54,12 @@ afterAll(async () => {
 test('test if chain id is returning cached result', async () => {
 	const result1 = await provider.send('eth_chainId', [ ])
     assert(parseInt(result1) === chainId, 'Expected chain id is OK')
-    const callLog1 = customRPC.callLog[customRPC.callLog.length - 1]
+    const callLog1 = rpcCallLogger.callLog[rpcCallLogger.callLog.length - 1]
     assert(callLog1.cached === true, 'Expected cached result')
 
     const result2 = await provider.send('eth_chainId', [ ])
     assert(parseInt(result2) === chainId, 'Expected chain id is OK')
-    const callLog2 = customRPC.callLog[customRPC.callLog.length - 1]
+    const callLog2 = rpcCallLogger.callLog[rpcCallLogger.callLog.length - 1]
     assert(callLog2.cached === true, 'Expected cached result')
 
     // result was cached, yet chosen providers should have been rotated

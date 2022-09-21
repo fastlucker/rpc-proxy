@@ -1,4 +1,5 @@
 const customRPC = require('../')
+const rpcCallLogger = require('./../loggers/rpc-calls')
 const { delay } = require('./_helper')
 
 let provider
@@ -76,10 +77,10 @@ beforeAll(async () => {
 
 test('test if eth_sendRawTransaction returns the tagged provider as it should', async () => {
 	await provider.send('eth_sendRawTransaction')
-    const callLog1 = customRPC.callLog[customRPC.callLog.length - 1]
+    const callLog1 = rpcCallLogger.callLog[rpcCallLogger.callLog.length - 1]
     expect(callLog1.providerUrl).toBe('http://url1')
 
     await provider.send('eth_sendRawTransaction')
-    const callLog2 = customRPC.callLog[customRPC.callLog.length - 1]
+    const callLog2 = rpcCallLogger.callLog[rpcCallLogger.callLog.length - 1]
     expect(callLog2.providerUrl).toBe('http://url1')
 })
