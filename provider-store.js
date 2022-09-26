@@ -79,7 +79,8 @@ class ProviderStore {
 
     chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, failedProviders = []) {
         // console.log(`--- Called method and args: ${propertyOrMethod} ${arguments}`)
-    
+        // console.log(`--- ${networkName} RATINGS: ${this.byNetwork[networkName].map(p => `\n(url: ${p.url}, rating: ${p.rating})`)}`)
+
         // plan
         // search the tags for the passed propertyOrMethod.
         // if nothing is found, check if propertyOrMethod is 'send'.

@@ -1,5 +1,5 @@
 const { ProviderStore } = require('./provider-store')
-const proxyBuilder = require('./proxy-builder')
+const { ProxyBuilder } = require('./proxy-builder')
 const dnslookup = require('./utils/dnslookup')
 const redis = require("redis")
 
@@ -7,11 +7,13 @@ const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
 const redisClient = redis.createClient(redisUrl);
 
 let providerStore
+let proxyBuilder
 
 function init (_providersConfig, _connectionParams = {}) {
   dnslookup.init(_providersConfig)
 
   providerStore = new ProviderStore(redisClient, _providersConfig, _connectionParams)
+  proxyBuilder = new ProxyBuilder(providerStore)
 
   //.: Activate "notify-keyspace-events" for expired type events
   redisClient.send_command('config', ['set','notify-keyspace-events','Ex'], SubscribeExpired)
@@ -41,7 +43,7 @@ function getProvider(networkName) {
   if (! providerStore.isInitialized()) throw new Error('CustomRPC error. Provider store not initialized')
   // if (! providerStore.byNetwork[networkName]) return null
 
-  return proxyBuilder.buildProxy(providerStore, networkName)
+  return proxyBuilder.buildProxy(networkName)
 }
 
 module.exports = { init, getProvider }
