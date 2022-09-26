@@ -1,8 +1,12 @@
 const { Logger } = require('@ethersproject/logger')
-const providerStore = require('./provider-store')
 const rpcCallLogger = require('./loggers/rpc-calls')
 
-function buildProxy(networkName) {
+const MAX_FAILS_PER_CALL = 1
+let providerStore
+
+function buildProxy(_providerStore, networkName) {
+    providerStore = _providerStore
+
     return new Proxy({}, {
         get: function(target, prop, receiver) {
 
@@ -10,7 +14,7 @@ function buildProxy(networkName) {
                 console.log(`[${new Date().toLocaleString()}] restarted`)
 
                 // restart all the providers in the network
-                providerStore.reconnectAllByNetwork(networkName, finalConnectionParams)
+                providerStore.reconnectAllByNetwork(networkName)
                 return
             }
 
@@ -74,7 +78,7 @@ async function handleTypeFunction(networkName, prop, args, failedProviders = [])
         return result
 
     } catch (e) {
-        failedProviders = providerStore.handleProviderFail(e, networkName, provider, failedProviders)
+        failedProviders = handleProviderFail(e, networkName, provider, failedProviders)
         return handleTypeFunction(networkName, prop, args, failedProviders)
     }
 }
@@ -90,7 +94,7 @@ function handleTypePropGet(networkName, prop, args, failedProviders = []) {
         rpcCallLogger.logCall(provider, prop, args, false, result)
         return result
     } catch (e) {
-        failedProviders = providerStore.handleProviderFail(e, networkName, provider, failedProviders)
+        failedProviders = handleProviderFail(e, networkName, provider, failedProviders)
         return handleTypePropGet(networkName, prop, args, failedProviders)
     }
 }
@@ -108,6 +112,17 @@ function handleTypePropSet(networkName, prop, value) {
             throw e
         }
     }
+}
+
+function handleProviderFail(e, networkName, provider, failedProviders) {
+    providerStore.lowerProviderRating(networkName, provider)
+    failedProviders.push(provider)
+
+    if (failedProviders.length > MAX_FAILS_PER_CALL) {
+        throw e;
+    }
+
+    return failedProviders
 }
 
 module.exports = { buildProxy }
