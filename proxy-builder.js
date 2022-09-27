@@ -1,13 +1,15 @@
 const { Logger } = require('@ethersproject/logger')
 const rpcCallLogger = require('./loggers/rpc-calls')
 
-const MAX_FAILS_PER_CALL = 1
+const defaultMaxFailsPerCall = 2
 
 class ProxyBuilder {
     providerStore = null
+    maxFailsPerCall = null
 
-    constructor(_providerStore) {
+    constructor(_providerStore, _maxFailsPerCall = null) {
         this.providerStore = _providerStore
+        this.maxFailsPerCall = _maxFailsPerCall === null ? defaultMaxFailsPerCall : parseInt(_maxFailsPerCall)
     }
 
     buildProxy(networkName) {
@@ -127,7 +129,7 @@ class ProxyBuilder {
         this.providerStore.lowerProviderRating(networkName, provider)
         failedProviders.push(provider)
 
-        if (failedProviders.length > MAX_FAILS_PER_CALL) {
+        if (failedProviders.length > this.maxFailsPerCall) {
             throw e;
         }
 

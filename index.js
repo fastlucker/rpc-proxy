@@ -26,20 +26,23 @@ let proxyBuilder
  *              ...
  *          }
  *      }
- * @param {Object} _options - Package options:
+ * @param {Object} _options - Package options (optional):
  *      {
- *          connectionParams: {timeout: 5000, throttleLimit: 2, throttleSlotInterval: 10}
- *          dnsCacheTTL: 7200
+ *          connectionParams: {timeout: 5000, throttleLimit: 2, throttleSlotInterval: 10},
+ *          dnsCacheTTL: 7200,
+ *          maxFailsPerCall: 2
  *      }
  */
 function init (_providersConfig, _options = {}) {
     _connectionParams = _options['connectionParams'] ?? {}
     _dnsCacheTTL = _options['dnsCacheTTL'] ?? null
+    _maxFailsPerCall = _options['maxFailsPerCall'] ?? null
 
+    // enable DNS lookup caching for RPC provider hostnames
     dnslookup.init(_providersConfig, _dnsCacheTTL)
 
     providerStore = new ProviderStore(redisClient, _providersConfig, _connectionParams)
-    proxyBuilder = new ProxyBuilder(providerStore)
+    proxyBuilder = new ProxyBuilder(providerStore, _maxFailsPerCall)
 
     //.: Activate "notify-keyspace-events" for expired type events
     redisClient.send_command('config', ['set','notify-keyspace-events','Ex'], SubscribeExpired)
