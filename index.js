@@ -16,7 +16,7 @@ let proxyBuilder
  *      {
  *          network_name_A: {
  *              RPCs: [
- *                  { url: 'https://rpc1-hostname/...', tags: [] },
+ *                  { url: 'https://rpc1-hostname/...', tags: ['eth_sendRawTransaction'] },
  *                  { url: 'wss://rpc2-hostname/...', tags: ['getLogs','eth_getLogs'] },
  *                  ...
  *              ],
@@ -28,20 +28,26 @@ let proxyBuilder
  *      }
  * @param {Object} _options - Package options (optional):
  *      {
- *          connectionParams: {timeout: 5000, throttleLimit: 2, throttleSlotInterval: 10},
- *          dnsCacheTTL: 7200,
+ *          connectionParams: {
+ *              timeout: 5000,              // milliseconds
+ *              throttleLimit: 2,
+ *              throttleSlotInterval: 10
+ *          },
+ *          lowRatingExpiry: 300,           // seconds
+ *          dnsCacheTTL: 7200,              // seconds
  *          maxFailsPerCall: 2
  *      }
  */
 function init (_providersConfig, _options = {}) {
     _connectionParams = _options['connectionParams'] ?? {}
+    _lowRatingExpiry = _options['lowRatingExpiry'] ?? null
     _dnsCacheTTL = _options['dnsCacheTTL'] ?? null
     _maxFailsPerCall = _options['maxFailsPerCall'] ?? null
 
     // enable DNS lookup caching for RPC provider hostnames
     dnslookup.init(_providersConfig, _dnsCacheTTL)
 
-    providerStore = new ProviderStore(redisClient, _providersConfig, _connectionParams)
+    providerStore = new ProviderStore(redisClient, _providersConfig, _connectionParams, _lowRatingExpiry)
     proxyBuilder = new ProxyBuilder(providerStore, _maxFailsPerCall)
 
     //.: Activate "notify-keyspace-events" for expired type events

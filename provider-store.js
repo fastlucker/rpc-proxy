@@ -2,19 +2,46 @@ const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
 
 const defaultRating = 100
 const defaultConnectionParams = {timeout: 5000, throttleLimit: 2, throttleSlotInterval: 10}
+const defaultLowRatingExpiry = 60 * 5 // seconds
 
 class ProviderStore {
     byNetwork = {}
     byNetworkCounter = {}
     byNetworkLatestBlock = {}
     connectionParams = {}
+    lowRatingExpiry = null
     redisClient = null
 
-    constructor(_redisClient, _providersConfig, _connectionParams = {}) {
+    /**
+     * @param {Object} _redisClient - Redis client object
+     * @param {Object} _providersConfig - Providers configuration object in the form of:
+     *      {
+     *          network_name_A: {
+     *              RPCs: [
+     *                  { url: 'https://rpc1-hostname/...', tags: ['eth_sendRawTransaction'] },
+     *                  { url: 'wss://rpc2-hostname/...', tags: ['getLogs','eth_getLogs'] },
+     *                  ...
+     *              ],
+     *              chainId: 99999
+     *          },
+     *          network_name_B: {
+     *              ...
+     *          }
+     *      }
+     * @param {Object} _connectionParams - Provider connection parameters (optional):
+     *      {
+     *          timeout: 5000,              // milliseconds
+     *          throttleLimit: 2,
+     *          throttleSlotInterval: 10
+     *      }
+     * @param {number} _lowRatingExpiry - Low-rating keys expiry time (in seconds) in Redis
+     */
+    constructor(_redisClient, _providersConfig, _connectionParams = {}, _lowRatingExpiry = null) {
         this.redisClient = _redisClient
 
-        // override default connection params if provided as input
+        // override default params if provided as input
         this.connectionParams = Object.assign(defaultConnectionParams, _connectionParams);
+        this.lowRatingExpiry = _lowRatingExpiry === null ? defaultLowRatingExpiry : parseInt(_lowRatingExpiry)
 
         for (const network in _providersConfig) {
             const chainId = _providersConfig[network]['chainId']
@@ -156,7 +183,7 @@ class ProviderStore {
                     getRatingKey(networkName, provider.connection.url),
                     this.byNetwork[networkName][index].rating,
                     'EX',
-                    60 * 5
+                    this.lowRatingExpiry
                 );
             }
         })
