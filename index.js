@@ -45,12 +45,17 @@ function init (_providersConfig, _options = {}) {
     redisClient.send_command('config', ['set','notify-keyspace-events','Ex'], SubscribeExpired)
 
     //.: Subscribe to the "notify-keyspace-events" channel used for expired type events
-    function SubscribeExpired(e, r) {
+    function SubscribeExpired(err, reply) {
+        if (err) {
+            console.log(`[Redis] Subscribe error: ${err}`)
+            return
+        }
+
         const redisClientSub = redis.createClient(redisUrl);
         const expired_subKey = '__keyevent@0__:expired'
 
         redisClientSub.subscribe(expired_subKey, function() {
-            console.log(` [i] Subscribed to ${expired_subKey} event channel: ${r}`)
+            console.log(`[Redis] Subscribed to ${expired_subKey} event channel: ${reply}`)
             redisClientSub.on('message', function (chan, msg) {
                 if (! msg.includes('_split_key_here_')) {
                     return
@@ -58,7 +63,7 @@ function init (_providersConfig, _options = {}) {
 
                 const network = msg.split('_split_key_here_')[0]
                 const url = msg.split('_split_key_here_')[1]
-                console.log('[expired]', 'Network: ' + network, 'Provider: ' + url)
+                console.log(`[Redis] Expired low-rating key. Network: ${network} Provider: ${url}`)
 
                 providerStore.resetProviderRating(network, url)
             })
