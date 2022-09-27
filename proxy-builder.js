@@ -61,9 +61,9 @@ class ProxyBuilder {
         try {
             // simulate/return chain id without making an RPC call
             if (prop === 'send' && args[0] === 'eth_chainId') {
-            result = `0x${provider._network.chainId.toString(16)}`
-            rpcCallLogger.logCall(provider, prop, args, true, result)
-            return result
+                result = `0x${provider._network.chainId.toString(16)}`
+                rpcCallLogger.logCall(provider, prop, args, true, result)
+                return result
             }
 
             // #buggy: fixup argument if 'getBlock' or 'getBlockWithTransactions' are called
@@ -75,10 +75,6 @@ class ProxyBuilder {
             result = provider[prop]( ...args )
 
             if (typeof result === 'object' && typeof result.then === 'function') {
-                if (networkName == 'polygon' && prop == 'send' && args[0] === 'eth_sendRawTransaction') {
-                    console.log('FOR eth_sendRawTransaction: ' + provider.connection.url)
-                }
-
                 result = await result
                 rpcCallLogger.logCall(provider, prop, args, false, result)
                 return new Promise(resolve => resolve(result))
