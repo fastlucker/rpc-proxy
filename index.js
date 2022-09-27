@@ -56,8 +56,7 @@ function init (_providersConfig, _options = {}) {
     //.: Subscribe to the "notify-keyspace-events" channel used for expired type events
     function SubscribeExpired(err, reply) {
         if (err) {
-            console.log(`[Redis] Subscribe error: ${err}`)
-            return
+            throw new Error(`Redis subscribe error: ${JSON.stringify(err)}`)
         }
 
         const redisClientSub = redis.createClient(redisUrl);
