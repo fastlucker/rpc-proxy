@@ -54,7 +54,15 @@ class ProviderStore {
     }
 
     isInitialized() {
-        return ! (Object.keys(this.byNetwork).length === 0)
+        return (Object.keys(this.byNetwork).length > 0)
+    }
+
+    getByNetwork(network) {
+        const networkConfigs = this.byNetwork[network]
+
+        if (! networkConfigs) throw new Error('Network not configured')
+
+        return networkConfigs
     }
 
     connect(providerUrl, network, chainId) {

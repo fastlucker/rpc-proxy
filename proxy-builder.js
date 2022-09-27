@@ -26,7 +26,7 @@ class ProxyBuilder {
 
                 // target only the send function as the send function
                 // is the one calling eth_call, eth_sendTransaction
-                if (typeof(this.providerStore.byNetwork[networkName][0].provider[prop]) == 'function') {
+                if (typeof(this.providerStore.getByNetwork(networkName)[0].provider[prop]) == 'function') {
                     const self = this
                     return async function() {
                         return self.handleTypeFunction(networkName, prop, arguments)
@@ -45,7 +45,7 @@ class ProxyBuilder {
     async handleTypeFunction(networkName, prop, args, failedProviders = []) {
         // special treatment for these methods calls, related to event subscribe/unsubscribe
         if (['on', 'once', 'off'].includes(prop)) {
-            const _providers = this.providerStore.byNetwork[networkName].map(p => p.provider)
+            const _providers = this.providerStore.getByNetwork(networkName).map(i => i.provider)
             for (const _provider of _providers) {
                 _provider[prop]( ...args )
                 rpcCallLogger.logCall(_provider, prop, args)
@@ -54,7 +54,7 @@ class ProxyBuilder {
         }
 
         const provider = this.providerStore.chooseProvider(networkName, prop, args[0], failedProviders)
-        console.log(`--- ${networkName} - ${provider.connection.url} --- method and args: ${prop} ${args} --- retries: ${failedProviders.length}`)
+        console.log(`--- ${networkName} - ${provider.connection.url} --- method and args: ${prop} ${JSON.stringify(args)} --- retries: ${failedProviders.length}`)
 
         let result
 
@@ -112,7 +112,7 @@ class ProxyBuilder {
 
     handleTypePropSet(networkName, prop, value) {
         // when setting a property, we would want to set it to all providers for this network
-        const _providers = this.providerStore.byNetwork[networkName].map(p => p.provider)
+        const _providers = this.providerStore.getByNetwork(networkName).map(i => i.provider)
         for (const _provider of _providers) {
             try {
                 _provider[prop] = value
