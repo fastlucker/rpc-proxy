@@ -1,4 +1,10 @@
 const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
+const redis = require("redis")
+
+const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
+const redisClient = redis.createClient(redisUrl);
+
+const REDIS_KEY_DELIMETER = '_KEY_DELIMETER_'
 
 const defaultRating = 100
 const defaultConnectionParams = {timeout: 5000, throttleLimit: 2, throttleSlotInterval: 10}
@@ -10,10 +16,8 @@ class ProviderStore {
     byNetworkLatestBlock = {}
     connectionParams = {}
     lowRatingExpiry = null
-    redisClient = null
 
     /**
-     * @param {Object} _redisClient - Redis client object
      * @param {Object} _providersConfig - Providers configuration object in the form of:
      *      {
      *          network_name_A: {
@@ -36,9 +40,7 @@ class ProviderStore {
      *      }
      * @param {number} _lowRatingExpiry - Low-rating keys expiry time (in seconds) in Redis
      */
-    constructor(_redisClient, _providersConfig, _connectionParams = {}, _lowRatingExpiry = null) {
-        this.redisClient = _redisClient
-
+    constructor(_providersConfig, _connectionParams = {}, _lowRatingExpiry = null) {
         // override default params if provided as input
         this.connectionParams = Object.assign(defaultConnectionParams, _connectionParams);
         this.lowRatingExpiry = _lowRatingExpiry === null ? defaultLowRatingExpiry : parseInt(_lowRatingExpiry)
@@ -64,7 +66,7 @@ class ProviderStore {
 
                 // this is async, will not load immediatelly.
                 // If there is a cached rating for the provider, set it
-                this.redisClient.get(getRatingKey(network, providerUrl), (err, value) => {
+                redisClient.get(getRatingKey(network, providerUrl), (err, value) => {
                     if (!value) return
 
                     this.byNetwork[network].filter(info => info.url == providerUrl)[0].rating = value
@@ -78,6 +80,39 @@ class ProviderStore {
                 })
             }
         }
+
+        // subscribe to Redis events for expiring keys
+        this.redisSubscribe()
+    }
+
+    redisSubscribe() {
+        //.: Subscribe to the "notify-keyspace-events" channel used for expired type events
+        const subscribeExpired = (err, reply) => {
+            if (err) {
+                throw new Error(`Redis subscribe error: ${JSON.stringify(err)}`)
+            }
+
+            const redisClientSub = redis.createClient(redisUrl);
+            const expired_subKey = '__keyevent@0__:expired'
+
+            redisClientSub.subscribe(expired_subKey, () => {
+                console.log(`[Redis] Subscribed to ${expired_subKey} event channel: ${reply}`)
+                redisClientSub.on('message', (chan, msg) => {
+                    if (! msg.includes(REDIS_KEY_DELIMETER)) {
+                        return
+                    }
+
+                    const network = msg.split(REDIS_KEY_DELIMETER)[0]
+                    const url = msg.split(REDIS_KEY_DELIMETER)[1]
+                    console.log(`[Redis] Expired low-rating key. Network: ${network} Provider: ${url}`)
+
+                    this.resetProviderRating(network, url)
+                })
+            })
+        }
+
+        //.: Activate "notify-keyspace-events" for expired type events
+        redisClient.send_command('config', ['set','notify-keyspace-events','Ex'], subscribeExpired)
     }
 
     isInitialized() {
@@ -114,7 +149,7 @@ class ProviderStore {
 
     chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, failedProviders = []) {
         // console.log(`--- Called method and args: ${propertyOrMethod} ${arguments}`)
-        // console.log(`--- ${networkName} RATINGS: ${this.byNetwork[networkName].map(p => `\n(url: ${p.url}, rating: ${p.rating})`)}`)
+        console.log(`--- ${networkName} RATINGS: ${this.byNetwork[networkName].map(p => `\n(url: ${p.url}, rating: ${p.rating})`)}`)
 
         // plan
         // search the tags for the passed propertyOrMethod.
@@ -179,7 +214,7 @@ class ProviderStore {
             if (object.url == provider.connection.url) {
                 this.byNetwork[networkName][index].rating = this.byNetwork[networkName][index].rating - 1
     
-                this.redisClient.set(
+                redisClient.set(
                     getRatingKey(networkName, provider.connection.url),
                     this.byNetwork[networkName][index].rating,
                     'EX',
@@ -209,7 +244,7 @@ function getProvidersWithHighestRating(singleNetworkProviders) {
 
 // get the key we are using in redis for the rating
 function getRatingKey(network, url) {
-    return network + '_split_key_here_' + url
+    return network + REDIS_KEY_DELIMETER + url
 }
 
 module.exports = { ProviderStore }
