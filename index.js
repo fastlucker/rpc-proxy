@@ -81,7 +81,7 @@ function init (_providersConfig, _options = {}) {
 }
 
 function getProvider(networkName) {
-    if (! providerStore.isInitialized()) throw new Error('CustomRPC error. Provider store not initialized')
+    if (! providerStore || ! providerStore.isInitialized()) throw new Error('Provider store not initialized')
 
     return proxyBuilder.buildProxy(networkName)
 }
