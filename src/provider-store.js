@@ -1,4 +1,5 @@
-const { StaticJsonRpcProvider, WebSocketProvider } = require('ethers').providers
+const { StaticJsonRpcProvider } = require('ethers').providers
+const { MyWebSocketProvider } = require('./providers/websocket-provider')
 const redis = require("redis")
 
 const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
@@ -129,7 +130,7 @@ class ProviderStore {
 
     connect(providerUrl, network, chainId) {
         const provider = providerUrl.startsWith('wss:')
-            ? new WebSocketProvider({url: providerUrl, ...this.connectionParams}, { network, chainId })
+            ? new MyWebSocketProvider({url: providerUrl, ...this.connectionParams}, { network, chainId })
             : new StaticJsonRpcProvider({url: providerUrl, ...this.connectionParams}, { network, chainId })
 
         if (provider && provider._websocket && provider._websocket.on) {
