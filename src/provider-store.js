@@ -144,7 +144,7 @@ class ProviderStore {
 
     reconnectAllByNetwork(network) {
         this.byNetwork[network].map((info, index) => {
-            this.byNetwork[network][index].provider = connect(info.url, network, info.chainId)
+            this.byNetwork[network][index].provider = this.connect(info.url, network, info.chainId)
         })
     }
 
