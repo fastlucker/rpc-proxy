@@ -17,7 +17,7 @@ class ProxyBuilder {
             get: (target, prop, receiver) => {
 
                 if (prop == 'restart') {
-                    console.log(`[${new Date().toLocaleString()}] restarted`)
+                    console.log(`[${networkName}] - [${new Date().toLocaleString()}] - RPCs  restarted`)
     
                     // restart all the providers in the network
                     this.providerStore.reconnectAllByNetwork(networkName)
@@ -41,7 +41,7 @@ class ProxyBuilder {
         })
     }
 
-    // The function handler try block
+    // function handler
     async handleTypeFunction(networkName, prop, args, providerFails = 0) {
         // special treatment for these methods calls, related to event subscribe/unsubscribe
         if (['on', 'once', 'off'].includes(prop)) {
@@ -54,7 +54,6 @@ class ProxyBuilder {
         }
 
         const provider = this.providerStore.chooseProvider(networkName, prop, args[0])
-        console.log(`--- ${networkName} - ${provider.connection.url} --- method: ${prop} args: ${JSON.stringify(args)} --- retries: ${providerFails}`)
 
         let result
 
@@ -88,11 +87,9 @@ class ProxyBuilder {
         }
     }
 
-    // The property handler try block.
-    // The difference is that the tryBlock is an async function while this one is not
+    // get property handler
     handleTypePropGet(networkName, prop, args, providerFails = 0) {
         const provider = this.providerStore.chooseProvider(networkName, prop, args[0])
-        console.log(`--- ${networkName} - ${provider.connection.url} --- property: ${prop} --- retries: ${providerFails}`)
 
         let result
 
@@ -106,6 +103,7 @@ class ProxyBuilder {
         }
     }
 
+    // set property handler
     handleTypePropSet(networkName, prop, value) {
         // when setting a property, we would want to set it to all providers for this network
         const _providers = this.providerStore.getByNetwork(networkName).map(i => i.provider)

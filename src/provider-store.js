@@ -149,8 +149,6 @@ class ProviderStore {
     }
 
     chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument) {
-        // console.log(`--- [${networkName}] RATINGS: ${this.byNetwork[networkName].map(p => `\n(url: ${p.url}, rating: ${p.rating})`)}`)
-    
         let networkRPCs = this.byNetwork[networkName]
     
         // take the ones with the highest ratings only
@@ -169,8 +167,6 @@ class ProviderStore {
     
         // if there are no matching providers, set them back to all
         validRPCs = validRPCs.length == 0 ? networkRPCs : validRPCs
-
-        // console.log(`--- [${networkName}] ${propertyOrMethod}, ${sendMethodFirstArgument} --- best RPCs: ${validRPCs.map(p => `\n(url: ${p.url}, rating: ${p.rating})`)}`)
 
         return this.pickProvider(networkName, validRPCs)
     }
@@ -218,7 +214,6 @@ class ProviderStore {
 function getProvidersWithHighestRating(singleNetworkProviderConfigs) {
     const sorted = singleNetworkProviderConfigs.sort((a, b) => b.rating - a.rating)
 
-    // console.log(`--- ratings: ${sorted.map(p => `(url: ${p.url}, rating: ${p.rating})`)}`)
     const highest = sorted[0].rating
     return sorted.filter(providerConfig => providerConfig.rating == highest)
 }
