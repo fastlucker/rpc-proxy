@@ -8,7 +8,7 @@ const redisClient = redis.createClient(redisUrl);
 const REDIS_KEY_DELIMETER = '_KEY_DELIMETER_'
 
 const defaultRating = 100
-const defaultConnectionParams = {timeout: 5000, throttleLimit: 2, throttleSlotInterval: 10}
+const defaultConnectionParams = {timeout: 10000, throttleLimit: 2, throttleSlotInterval: 10}
 const defaultLowRatingExpiry = 60 * 5 // seconds
 
 class ProviderStore {
