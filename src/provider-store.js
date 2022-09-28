@@ -148,48 +148,30 @@ class ProviderStore {
         })
     }
 
-    chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, failedProviders = []) {
-        // console.log(`--- Called method and args: ${propertyOrMethod} ${arguments}`)
-        // console.log(`--- ${networkName} RATINGS: ${this.byNetwork[networkName].map(p => `\n(url: ${p.url}, rating: ${p.rating})`)}`)
+    chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument) {
+        // console.log(`--- [${networkName}] RATINGS: ${this.byNetwork[networkName].map(p => `\n(url: ${p.url}, rating: ${p.rating})`)}`)
+    
+        let networkRPCs = this.byNetwork[networkName]
+    
+        // take the ones with the highest ratings only
+        // (this means that we take either only not failed ones
+        // or if all have failed recently, then we'll get ones
+        // which failed longest time ago)
+        networkRPCs = getProvidersWithHighestRating(networkRPCs)
 
-        // plan
         // search the tags for the passed propertyOrMethod.
         // if nothing is found, check if propertyOrMethod is 'send'.
         // if it is 'send', search the tags for arguments[0] (eth method name)
-        // if nothing is found, rotate
-        // if found in all providers, rotate
-        // if found in 0 < x < max providers, set one of those providers
-    
-        const networkRPCs = this.byNetwork[networkName]
-    
         let validRPCs = networkRPCs.filter(i => i['tags'].includes(propertyOrMethod))
         if (validRPCs.length == 0 && propertyOrMethod == 'send') {
             validRPCs = networkRPCs.filter(i => i['tags'].includes(sendMethodFirstArgument))
         }
     
-        const uniqueFailedProviderUrls = [...new Set(failedProviders.map(provider => provider.connection.url))]
-    
-        // if there are no specific providers, set them back to all.
-        // or... if we hit the fallback mechanism and all the specific
-        // RPCs for this request failed, just choose one of all possible.
-        if (
-            validRPCs.length == 0
-            || (
-                uniqueFailedProviderUrls.length > 0
-                && validRPCs.length == uniqueFailedProviderUrls.length
-                && validRPCs.filter(rpc => uniqueFailedProviderUrls.includes(rpc.url)).length == uniqueFailedProviderUrls.length
-            )
-        ) {
-            // try to exclude the failed RPCs... but if there are no other RPCs
-            // available, we have no choice except to try again with the failed one
-            if (uniqueFailedProviderUrls.length > 0) {
-                validRPCs = networkRPCs.filter(rpc => ! uniqueFailedProviderUrls.includes(rpc.url))
-            }
-            if (validRPCs.length == 0) validRPCs = networkRPCs
-        }
-    
-        // take the ones with the highest ratings only and rotate them
-        validRPCs = getProvidersWithHighestRating(validRPCs)
+        // if there are no matching providers, set them back to all
+        validRPCs = validRPCs.length == 0 ? networkRPCs : validRPCs
+
+        // console.log(`--- [${networkName}] ${propertyOrMethod}, ${sendMethodFirstArgument} --- best RPCs: ${validRPCs.map(p => `\n(url: ${p.url}, rating: ${p.rating})`)}`)
+
         return this.roundRobbinRotate(networkName, validRPCs)
     }
 
@@ -230,17 +212,13 @@ class ProviderStore {
     }
 }
 
-// return only the providers that have the highest rating
-function getProvidersWithHighestRating(singleNetworkProviders) {
-    const sorted = singleNetworkProviders.sort(function(a, b) {
-        return b.rating - a.rating
-    })
+// return only the provider configs that have the highest rating
+function getProvidersWithHighestRating(singleNetworkProviderConfigs) {
+    const sorted = singleNetworkProviderConfigs.sort((a, b) => b.rating - a.rating)
 
     // console.log(`--- ratings: ${sorted.map(p => `(url: ${p.url}, rating: ${p.rating})`)}`)
     const highest = sorted[0].rating
-    return sorted.filter(one => {
-        return one.rating == highest
-    })
+    return sorted.filter(providerConfig => providerConfig.rating == highest)
 }
 
 // get the key we are using in redis for the rating

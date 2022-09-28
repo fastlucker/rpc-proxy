@@ -42,7 +42,7 @@ class ProxyBuilder {
     }
 
     // The function handler try block
-    async handleTypeFunction(networkName, prop, args, failedProviders = []) {
+    async handleTypeFunction(networkName, prop, args, providerFails = 0) {
         // special treatment for these methods calls, related to event subscribe/unsubscribe
         if (['on', 'once', 'off'].includes(prop)) {
             const _providers = this.providerStore.getByNetwork(networkName).map(i => i.provider)
@@ -53,8 +53,8 @@ class ProxyBuilder {
             return
         }
 
-        const provider = this.providerStore.chooseProvider(networkName, prop, args[0], failedProviders)
-        console.log(`--- ${networkName} - ${provider.connection.url} --- method: ${prop} args: ${JSON.stringify(args)} --- retries: ${failedProviders.length}`)
+        const provider = this.providerStore.chooseProvider(networkName, prop, args[0])
+        console.log(`--- ${networkName} - ${provider.connection.url} --- method: ${prop} args: ${JSON.stringify(args)} --- retries: ${providerFails}`)
 
         let result
 
@@ -83,16 +83,16 @@ class ProxyBuilder {
             return result
 
         } catch (e) {
-            failedProviders = this.handleProviderFail(e, networkName, provider, failedProviders)
-            return this.handleTypeFunction(networkName, prop, args, failedProviders)
+            providerFails = this.handleProviderFail(e, networkName, provider, providerFails)
+            return this.handleTypeFunction(networkName, prop, args, providerFails)
         }
     }
 
     // The property handler try block.
     // The difference is that the tryBlock is an async function while this one is not
-    handleTypePropGet(networkName, prop, args, failedProviders = []) {
-        const provider = this.providerStore.chooseProvider(networkName, prop, args[0], failedProviders)
-        console.log(`--- ${networkName} - ${provider.connection.url} --- property: ${prop} --- retries: ${failedProviders.length}`)
+    handleTypePropGet(networkName, prop, args, providerFails = 0) {
+        const provider = this.providerStore.chooseProvider(networkName, prop, args[0])
+        console.log(`--- ${networkName} - ${provider.connection.url} --- property: ${prop} --- retries: ${providerFails}`)
 
         let result
 
@@ -101,8 +101,8 @@ class ProxyBuilder {
             rpcCallLogger.logCall(provider, prop, args, false, result)
             return result
         } catch (e) {
-            failedProviders = this.handleProviderFail(e, networkName, provider, failedProviders)
-            return this.handleTypePropGet(networkName, prop, args, failedProviders)
+            providerFails = this.handleProviderFail(e, networkName, provider, providerFails)
+            return this.handleTypePropGet(networkName, prop, args, providerFails)
         }
     }
 
@@ -121,15 +121,15 @@ class ProxyBuilder {
         }
     }
 
-    handleProviderFail(e, networkName, provider, failedProviders) {
+    handleProviderFail(e, networkName, provider, providerFails) {
         this.providerStore.lowerProviderRating(networkName, provider)
-        failedProviders.push(provider)
+        providerFails++
 
-        if (failedProviders.length > this.maxFailsPerCall) {
+        if (providerFails > this.maxFailsPerCall) {
             throw e;
         }
 
-        return failedProviders
+        return providerFails
     }
 }
 
