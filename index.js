@@ -1,6 +1,6 @@
-const { ProviderStore } = require('./provider-store')
-const { ProxyBuilder } = require('./proxy-builder')
-const dnslookup = require('./utils/dnslookup')
+const { ProviderStore } = require('./src/provider-store')
+const { ProxyBuilder } = require('./src/proxy-builder')
+const dnsCache = require('./src/utils/dns-cache')
 
 let providerStore
 let proxyBuilder
@@ -41,7 +41,7 @@ function init (_providersConfig, _options = {}) {
     _maxFailsPerCall = _options['maxFailsPerCall'] ?? null
 
     // enable DNS lookup caching for RPC provider hostnames
-    dnslookup.init(_providersConfig, _dnsCacheTTL)
+    dnsCache.init(_providersConfig, _dnsCacheTTL)
 
     providerStore = new ProviderStore(_providersConfig, _connectionParams, _lowRatingExpiry)
     proxyBuilder = new ProxyBuilder(providerStore, _maxFailsPerCall)

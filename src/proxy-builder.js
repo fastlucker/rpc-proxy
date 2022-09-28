@@ -1,5 +1,5 @@
 const { Logger } = require('@ethersproject/logger')
-const rpcCallLogger = require('./loggers/rpc-calls')
+const rpcCallLogger = require('./utils/rpc-call-logger')
 
 const defaultMaxFailsPerCall = 2
 
@@ -54,7 +54,7 @@ class ProxyBuilder {
         }
 
         const provider = this.providerStore.chooseProvider(networkName, prop, args[0], failedProviders)
-        console.log(`--- ${networkName} - ${provider.connection.url} --- method and args: ${prop} ${JSON.stringify(args)} --- retries: ${failedProviders.length}`)
+        console.log(`--- ${networkName} - ${provider.connection.url} --- method: ${prop} args: ${JSON.stringify(args)} --- retries: ${failedProviders.length}`)
 
         let result
 

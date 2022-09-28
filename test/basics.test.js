@@ -1,5 +1,5 @@
 const customRPC = require('../')
-const rpcCallLogger = require('./../loggers/rpc-calls')
+const rpcCallLogger = require('./../src/utils/rpc-call-logger')
 const assert = require('assert')
 const { delay } = require('./_helper')
 
