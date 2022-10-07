@@ -22,7 +22,7 @@ let proxyBuilder
  *              ...
  *          }
  *      }
- * @param {Object} _options - Package options (optional):
+ * @param {Object} options - Package options (optional):
  *      {
  *          connectionParams: {
  *              timeout: 5000,              // milliseconds
@@ -34,17 +34,19 @@ let proxyBuilder
  *          maxFailsPerCall: 2
  *      }
  */
-function init (_providersConfig, _options = {}) {
-    _connectionParams = _options['connectionParams'] ?? {}
-    _lowRatingExpiry = _options['lowRatingExpiry'] ?? null
-    _dnsCacheTTL = _options['dnsCacheTTL'] ?? null
-    _maxFailsPerCall = _options['maxFailsPerCall'] ?? null
-
+function init (providersConfig, options = { 
+    connectionParams: {},
+    lowRatingExpiry: null,
+    dnsCacheEnabled: true, 
+    dnsCacheTTL: null,
+    maxFailsPerCall: null
+}) {
+    
     // enable DNS lookup caching for RPC provider hostnames
-    dnsCache.init(_providersConfig, _dnsCacheTTL)
+    if (options.dnsCacheEnabled) dnsCache.init(providersConfig, options.dnsCacheTTL)
 
-    providerStore = new ProviderStore(_providersConfig, _connectionParams, _lowRatingExpiry)
-    proxyBuilder = new ProxyBuilder(providerStore, _maxFailsPerCall)
+    providerStore = new ProviderStore(providersConfig, options.connectionParams, options.lowRatingExpiry)
+    proxyBuilder = new ProxyBuilder(providerStore, options.maxFailsPerCall)
 }
 
 function getProvider(networkName) {
