@@ -30,6 +30,7 @@ let proxyBuilder
  *              throttleSlotInterval: 10
  *          },
  *          lowRatingExpiry: 300,           // seconds
+ *          dnsCacheEnabled: true
  *          dnsCacheTTL: 7200,              // seconds
  *          maxFailsPerCall: 2
  *      }
@@ -41,7 +42,6 @@ function init (providersConfig, options = {
     dnsCacheTTL: null,
     maxFailsPerCall: null
 }) {
-    
     // enable DNS lookup caching for RPC provider hostnames
     if (options.dnsCacheEnabled) dnsCache.init(providersConfig, options.dnsCacheTTL)
 
