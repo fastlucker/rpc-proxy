@@ -1,6 +1,6 @@
 {
   "name": "relayer-custom-rpc",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "description": "A custom RPC distributor for the relayer",
   "main": "index.js",
   "scripts": {
