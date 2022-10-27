@@ -193,7 +193,7 @@ class ProviderStore {
 
     connect(providerUrl, network, chainId) {
         const provider = providerUrl.startsWith('wss:')
-            ? new MyWebSocketProvider({url: providerUrl, ...this.connectionParams}, { network, chainId })
+            ? new MyWebSocketProvider(providerUrl, { network, chainId })
             : new StaticJsonRpcProvider({url: providerUrl, ...this.connectionParams}, { network, chainId })
 
         if (provider && provider._websocket && provider._websocket.on) {
