@@ -1,11 +1,15 @@
 const { StaticJsonRpcProvider } = require('ethers').providers
 const { MyWebSocketProvider } = require('./providers/websocket-provider')
+
 const redis = require("redis")
+const { promisify } = require('util');
 
 const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
 const redisClient = redis.createClient(redisUrl);
 
-const REDIS_KEY_DELIMETER = '_KEY_DELIMETER_'
+const redisGet = promisify(redisClient.get).bind(redisClient)
+const redisSet = promisify(redisClient.set).bind(redisClient)
+const redisEval = promisify(redisClient.eval).bind(redisClient)
 
 const defaultRating = 100
 const defaultConnectionParams = {timeout: 10000, throttleLimit: 2, throttleSlotInterval: 10}
@@ -57,63 +61,122 @@ class ProviderStore {
                 const providerUrl = providerInfo['url']
                 const provider = this.connect(providerUrl, network, chainId)
 
-                this.byNetwork[network].push({
+                const providerConfig = {
                     url: providerUrl,
                     provider: provider,
                     tags: providerInfo['tags'],
                     chainId: chainId,
-                    rating: defaultRating
-                })
+                    rating: defaultRating,
+                    lastBlockTimestamp: (new Date()).getTime()
+                }
 
-                // this is async, will not load immediatelly.
-                // If there is a cached rating for the provider, set it
-                redisClient.get(getRatingKey(network, providerUrl), (err, value) => {
-                    if (!value) return
+                this.byNetwork[network].push(providerConfig)
 
-                    this.byNetwork[network].filter(info => info.url == providerUrl)[0].rating = value
+                // load cached rating from Redis, if any
+                redisGet(getRatingKey(network, providerUrl)).then((ratingValue) => {
+                    if (!ratingValue) return
+
+                    this.byNetwork[network].filter(config => config.url == providerUrl)[0].rating = ratingValue
                 })
 
                 provider.on('block', async (blockNum) => {
+                    providerConfig.lastBlockTimestamp = (new Date()).getTime()
+
                     if (blockNum <= this.byNetworkLatestBlock[network]) return
 
                     this.byNetworkLatestBlock[network] = blockNum
                     provider.emit('latest-block', blockNum)
                 })
+
+                this.startProviderPinger(network, providerUrl)
             }
         }
-
-        // subscribe to Redis events for expiring keys
-        this.redisSubscribe()
     }
 
-    redisSubscribe() {
-        //.: Subscribe to the "notify-keyspace-events" channel used for expired type events
-        const subscribeExpired = (err, reply) => {
-            if (err) {
-                throw new Error(`Redis subscribe error: ${JSON.stringify(err)}`)
+    // mechanism for poll/ping of provider when not responding
+    startProviderPinger(network, providerUrl) {
+        // redis cmd to increase counter and update its expire timeout
+        const REDIS_CMD = "redis.call('incr',KEYS[1]); redis.call('EXPIRE',KEYS[1],ARGV[1]); return redis.call('GET', KEYS[1])"
+
+        const REDIS_FAIL_KEY = `fail:${network}:${providerUrl}`
+        const REDIS_SUCCESS_KEY = `success:${network}:${providerUrl}`
+        const PING_INTERVAL = 10    // seconds
+        const MAX_FAILS = 2
+        const MIN_SUCCESSES = 3
+
+        // max interval between blocks
+        const MAX_INTER_BLOCK_INTERVAL = 30 // seconds
+
+        let pingInProgress = false
+
+        // const sleep1 = () => new Promise(resolve => setTimeout(resolve, 10000))
+
+        setInterval(async () => {
+            const providerConfig = this.byNetwork[network].filter(config => config.url == providerUrl)[0]
+            console.log(`---- Provider rating: ${providerConfig.rating} (${providerConfig.url}) ------- last block time: ${providerConfig.lastBlockTimestamp}`)
+
+            // all good, no need to ping yet
+            if (
+                providerConfig.rating >= defaultRating
+                && (new Date()).getTime() - providerConfig.lastBlockTimestamp < MAX_INTER_BLOCK_INTERVAL * 1000
+            ) {
+                console.log(`---- All good, no need to ping yet: ${providerConfig.url}`)
+                return
             }
 
-            const redisClientSub = redis.createClient(redisUrl);
-            const expired_subKey = '__keyevent@0__:expired'
+            console.log(`---- Recent fail or no block for 30secs - initiating ping: ${providerConfig.url}`)
 
-            redisClientSub.subscribe(expired_subKey, () => {
-                console.log(`[Redis] Subscribed to ${expired_subKey} event channel: ${reply}`)
-                redisClientSub.on('message', (chan, msg) => {
-                    if (! msg.includes(REDIS_KEY_DELIMETER)) {
-                        return
+            const failKeyValue = await redisGet(REDIS_FAIL_KEY)
+            const fails = parseInt(failKeyValue ?? 0)
+            console.log(fails, pingInProgress)
+
+            if (pingInProgress) {
+                console.log(`---- PING IN PROGRESS, SKIPPING PING: ${providerUrl}`)
+                return
+            }
+
+            if (fails >= MAX_FAILS) {
+                console.log(`---- SOON REACHED MAX FAILS, WAITING: ${providerUrl}`)
+                return
+            }
+
+            const pingStarted = (new Date()).getTime()
+            pingInProgress = true
+            console.log(`---- SET - PING IN PROGRESS`)
+
+            try {
+                // await sleep1()
+
+                const block = await providerConfig.provider.getBlock()
+                console.log(`---- fetched block: ${block.number}`)
+
+                // recovery phase
+                if (providerConfig.rating < defaultRating) {
+                    console.log(`------- SUCCESS: ${providerConfig.url}`)
+
+                    const successesUpdated = await redisEval(REDIS_CMD, 1, REDIS_SUCCESS_KEY, (MIN_SUCCESSES + 1) * PING_INTERVAL)
+    
+                    if (successesUpdated >= MIN_SUCCESSES) {
+                        console.log(`------- RESTORING PROVIDER RATING: ${providerConfig.url}`)
+
+                        this.resetProviderRating(network, providerConfig.provider)
                     }
+                }
+            } catch(error) {
+                console.log(`------- FAILED: ${providerConfig.url} --- ${error}`)
 
-                    const network = msg.split(REDIS_KEY_DELIMETER)[0]
-                    const url = msg.split(REDIS_KEY_DELIMETER)[1]
-                    console.log(`[Redis] Expired low-rating key. Network: ${network} Provider: ${url}`)
+                const failsUpdated = await redisEval(REDIS_CMD, 1, REDIS_FAIL_KEY, (fails + 1) * PING_INTERVAL * 3)
 
-                    this.resetProviderRating(network, url)
-                })
-            })
-        }
+                if (failsUpdated >= MAX_FAILS ) {
+                    console.log(`------- MAX FAILS, LOWERING PROVIDER RATING: ${providerConfig.url}`)
 
-        //.: Activate "notify-keyspace-events" for expired type events
-        redisClient.send_command('config', ['set','notify-keyspace-events','Ex'], subscribeExpired)
+                    this.lowerProviderRating(network, providerConfig.provider)
+                }
+            } finally {
+                pingInProgress = false
+                console.log(`---- SET - PING FINISHED --- time taken: ${(new Date()).getTime() - pingStarted}`)
+            }
+        }, PING_INTERVAL * 1000)
     }
 
     isInitialized() {
@@ -191,22 +254,30 @@ class ProviderStore {
 
     lowerProviderRating(networkName, provider) {
         // lower the rating
-        this.byNetwork[networkName].map((object, index) => {
-            if (object.url == provider.connection.url) {
-                this.byNetwork[networkName][index].rating = this.byNetwork[networkName][index].rating - 1
-    
-                redisClient.set(
-                    getRatingKey(networkName, provider.connection.url),
-                    this.byNetwork[networkName][index].rating,
-                    'EX',
-                    this.lowRatingExpiry
-                );
-            }
-        })
+        const providerConfig = this.byNetwork[networkName].filter(providerConfig => providerConfig.url == provider.connection.url)[0]
+        if (!providerConfig) throw new Error(`Bad network or provider url: ${networkName}, ${provider.connection.url}`)
+
+        providerConfig.rating = providerConfig.rating - 1
+        redisSet(getRatingKey(networkName, providerConfig.url), providerConfig.rating)
+
+        // this.byNetwork[networkName].map((providerConfig, index) => {
+        //     if (providerConfig.url == provider.connection.url) {
+        //         // this.byNetwork[networkName][index].rating = this.byNetwork[networkName][index].rating - 1
+        //         providerConfig.rating = providerConfig.rating - 1
+        //         redisSet(getRatingKey(networkName, provider.connection.url), this.byNetwork[networkName][index].rating)
+        //     }
+        //     return providerConfig
+        // })
     }
 
-    resetProviderRating(networkName, providerUrl) {
-        this.byNetwork[networkName].filter(info => info.url == providerUrl)[0].rating = defaultRating
+    resetProviderRating(networkName, provider) {
+        // this.byNetwork[networkName].filter(info => info.url == providerUrl)[0].rating = defaultRating
+
+        const providerConfig = this.byNetwork[networkName].filter(providerConfig => providerConfig.url == provider.connection.url)[0]
+        if (!providerConfig) throw new Error(`Bad network or provider url: ${networkName}, ${provider.connection.url}`)
+
+        providerConfig.rating = defaultRating
+        redisSet(getRatingKey(networkName, providerConfig.url), providerConfig.rating)
     }
 }
 
@@ -220,7 +291,7 @@ function getProvidersWithHighestRating(singleNetworkProviderConfigs) {
 
 // get the key we are using in redis for the rating
 function getRatingKey(network, url) {
-    return network + REDIS_KEY_DELIMETER + url
+    return `rating:${network}:${url}`
 }
 
 module.exports = { ProviderStore }
