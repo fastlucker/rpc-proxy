@@ -21,6 +21,7 @@ class ProviderStore {
     byNetworkLatestBlock = {}
     connectionParams = {}
     lowRatingExpiry = null
+    providerPickAlgorithm = null
 
     /**
      * @param {Object} _providersConfig - Providers configuration object in the form of:
@@ -44,11 +45,14 @@ class ProviderStore {
      *          throttleSlotInterval: 10
      *      }
      * @param {number} _lowRatingExpiry - Low-rating keys expiry time (in seconds) in Redis
+     * @param {string} _providerPickAlgorithm - Algorithm for picking provider for next request (possible: primary | round-robin)
+     * 
      */
-    constructor(_providersConfig, _connectionParams = {}, _lowRatingExpiry = null) {
+    constructor(_providersConfig, _connectionParams = {}, _lowRatingExpiry = null, _providerPickAlgorithm = 'primary') {
         // override default params if provided as input
         this.connectionParams = Object.assign(defaultConnectionParams, _connectionParams);
         this.lowRatingExpiry = _lowRatingExpiry === null ? defaultLowRatingExpiry : parseInt(_lowRatingExpiry)
+        this.providerPickAlgorithm = _providerPickAlgorithm
 
         for (const network in _providersConfig) {
             const chainId = _providersConfig[network]['chainId']
@@ -64,7 +68,8 @@ class ProviderStore {
                 const providerConfig = {
                     url: providerUrl,
                     provider: provider,
-                    tags: providerInfo['tags'],
+                    primary: providerInfo['primary'] ?? false,
+                    tags: providerInfo['tags'] ?? [],
                     chainId: chainId,
                     rating: defaultRating,
                     lastBlockTimestamp: (new Date()).getTime()
@@ -211,9 +216,9 @@ class ProviderStore {
         })
     }
 
-    chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument) {
+    chooseProvider(networkName, propertyOrMethod, sendMethodFirstArgument, algorithm = null) {
         let networkRPCs = this.byNetwork[networkName]
-    
+
         // take the ones with the highest ratings only
         // (this means that we take either only not failed ones
         // or if all have failed recently, then we'll get ones
@@ -231,25 +236,47 @@ class ProviderStore {
         // if there are no matching providers, set them back to all
         validRPCs = validRPCs.length == 0 ? networkRPCs : validRPCs
 
-        return this.pickProvider(networkName, validRPCs)
+        return this.pickProvider(validRPCs, networkName, algorithm)
     }
 
-    pickProvider(networkName, availableProviderConfigs) {
-        let providerConfig
+    pickProvider(availableProviderConfigs, networkName, algorithm = null) {
+        algorithm = algorithm ?? this.providerPickAlgorithm
 
+        const algorithmMappings = {
+            'primary': this.getProviderConfigPrimary.bind(this),
+            'round-robin': this.getProviderConfigRoundRobin.bind(this)
+        }
+
+        const algorithmFunc = algorithmMappings[algorithm] ?? this.getProviderConfigPrimary.bind(this)
+
+        const providerConfig = algorithmFunc(availableProviderConfigs, networkName)
+        this.byNetworkLastUsedProviderUrl[networkName] = providerConfig.url
+
+        return providerConfig.provider
+    }
+
+    // algorithm: primary
+    getProviderConfigPrimary(availableProviderConfigs) {
+        const primaryConfigs = availableProviderConfigs.filter(config => config.primary === true)
+
+        if (primaryConfigs.length > 0) {
+            return primaryConfigs[0]
+        }
+
+        return availableProviderConfigs[0]
+    }
+
+    // algorithm: round-robin
+    getProviderConfigRoundRobin(availableProviderConfigs, networkName) {
         // try to pick a random provider other than the last used one
         // if there's none other, than just use the same again
         const otherProviderConfigs = availableProviderConfigs.filter(config => config.url != this.byNetworkLastUsedProviderUrl[networkName])
         if (otherProviderConfigs.length > 0) {
             const pickIndex = Math.floor(Math.random() * otherProviderConfigs.length)
-            providerConfig = otherProviderConfigs[pickIndex]
-        } else {
-            providerConfig = availableProviderConfigs[0]
+            return otherProviderConfigs[pickIndex]
         }
 
-        this.byNetworkLastUsedProviderUrl[networkName] = providerConfig.url
-
-        return providerConfig.provider
+        return availableProviderConfigs[0]
     }
 
     lowerProviderRating(networkName, provider) {

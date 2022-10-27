@@ -25,19 +25,21 @@ let proxyBuilder
  * @param {Object} options - Package options (optional):
  *      {
  *          connectionParams: {
- *              timeout: 5000,              // milliseconds
+ *              timeout: 5000,                  // milliseconds
  *              throttleLimit: 2,
  *              throttleSlotInterval: 10
  *          },
- *          lowRatingExpiry: 300,           // seconds
+ *          lowRatingExpiry: 300,               // seconds
+ *          providerPickAlgorithm: 'primary'    // primary | round-robin
  *          dnsCacheEnabled: true
- *          dnsCacheTTL: 7200,              // seconds
+ *          dnsCacheTTL: 7200,                  // seconds
  *          maxFailsPerCall: 2
  *      }
  */
 function init (providersConfig, options = { 
     connectionParams: {},
     lowRatingExpiry: null,
+    providerPickAlgorithm: 'primary',
     dnsCacheEnabled: true, 
     dnsCacheTTL: null,
     maxFailsPerCall: null
@@ -45,7 +47,7 @@ function init (providersConfig, options = {
     // enable DNS lookup caching for RPC provider hostnames
     if (options.dnsCacheEnabled) dnsCache.init(providersConfig, options.dnsCacheTTL)
 
-    providerStore = new ProviderStore(providersConfig, options.connectionParams, options.lowRatingExpiry)
+    providerStore = new ProviderStore(providersConfig, options.connectionParams, options.lowRatingExpiry, options.providerPickAlgorithm)
     proxyBuilder = new ProxyBuilder(providerStore, options.maxFailsPerCall)
 }
 
