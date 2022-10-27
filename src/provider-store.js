@@ -303,28 +303,14 @@ class ProviderStore {
     }
 
     lowerProviderRating(networkName, provider) {
-        // lower the rating
-        const providerConfig = this.byNetwork[networkName].filter(providerConfig => providerConfig.url == provider.connection.url)[0]
-        if (!providerConfig) throw new Error(`Bad network or provider url: ${networkName}, ${provider.connection.url}`)
+        const providerConfig = this.getProviderConfig(networkName, provider)
 
         providerConfig.rating = providerConfig.rating - 1
         redisSet(getRatingKey(networkName, providerConfig.url), providerConfig.rating)
-
-        // this.byNetwork[networkName].map((providerConfig, index) => {
-        //     if (providerConfig.url == provider.connection.url) {
-        //         // this.byNetwork[networkName][index].rating = this.byNetwork[networkName][index].rating - 1
-        //         providerConfig.rating = providerConfig.rating - 1
-        //         redisSet(getRatingKey(networkName, provider.connection.url), this.byNetwork[networkName][index].rating)
-        //     }
-        //     return providerConfig
-        // })
     }
 
     resetProviderRating(networkName, provider) {
-        // this.byNetwork[networkName].filter(info => info.url == providerUrl)[0].rating = defaultRating
-
-        const providerConfig = this.byNetwork[networkName].filter(providerConfig => providerConfig.url == provider.connection.url)[0]
-        if (!providerConfig) throw new Error(`Bad network or provider url: ${networkName}, ${provider.connection.url}`)
+        const providerConfig = this.getProviderConfig(networkName, provider)
 
         providerConfig.rating = defaultRating
         redisSet(getRatingKey(networkName, providerConfig.url), providerConfig.rating)
