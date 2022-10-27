@@ -226,7 +226,7 @@ class ProviderStore {
         const providerConfig = this.getProviderConfig(network, provider)
 
         providerConfig.provider = this.connect(providerConfig.url, network, providerConfig.chainId)
-        this.setupProvider(network, provider)
+        this.setupProvider(network, providerConfig.provider)
         console.log(`---------- RECONNECTED TO ${providerConfig.url}`)
     }
 
