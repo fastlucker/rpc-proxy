@@ -86,7 +86,7 @@ class ProviderStore {
 
                 this.setupProvider(network, provider)
 
-                this.startProviderPinger(network, providerUrl)
+                this.startProviderPinger(network, provider)
             }
         }
     }
@@ -105,26 +105,27 @@ class ProviderStore {
     }
 
     // mechanism for poll/ping of provider when not responding
-    startProviderPinger(network, providerUrl) {
+    startProviderPinger(network, provider) {
+        const providerUrl = provider.connection.url
+
         // redis cmd to increase counter and update its expire timeout
         const REDIS_CMD = "redis.call('incr',KEYS[1]); redis.call('EXPIRE',KEYS[1],ARGV[1]); return redis.call('GET', KEYS[1])"
 
         const REDIS_FAIL_KEY = `fail:${network}:${providerUrl}`
         const REDIS_SUCCESS_KEY = `success:${network}:${providerUrl}`
         const PING_INTERVAL = 10    // seconds
-        const MAX_FAILS = 2
-        const MIN_SUCCESSES = 3
+        const PING_TIMEOUT = 10     // seconds
+        const MAX_FAILS = 3
+        const MIN_SUCCESSES = 5
 
         // max interval between blocks
         const MAX_INTER_BLOCK_INTERVAL = 30 // seconds
 
         let pingInProgress = false
 
-        // const sleep1 = () => new Promise(resolve => setTimeout(resolve, 10000))
-
         setInterval(async () => {
-            const providerConfig = this.byNetwork[network].filter(config => config.url == providerUrl)[0]
-            console.log(`---- Provider rating: ${providerConfig.rating} (${providerConfig.url}) ------- last block time: ${providerConfig.lastBlockTimestamp}`)
+            const providerConfig = this.getProviderConfig(network, provider)
+            console.log(`--- Provider rating: ${providerConfig.rating} (${providerConfig.url}) --- last block time: ${providerConfig.lastBlockTimestamp}`)
 
             // all good, no need to ping yet
             if (
@@ -139,7 +140,6 @@ class ProviderStore {
 
             const failKeyValue = await redisGet(REDIS_FAIL_KEY)
             const fails = parseInt(failKeyValue ?? 0)
-            console.log(fails, pingInProgress)
 
             if (pingInProgress) {
                 console.log(`---- PING IN PROGRESS, SKIPPING PING: ${providerUrl}`)
@@ -153,20 +153,24 @@ class ProviderStore {
 
             const pingStarted = (new Date()).getTime()
             pingInProgress = true
-            console.log(`---- SET - PING IN PROGRESS`)
+            console.log(`---- INITIATING PING: ${providerUrl}`)
 
             try {
-                // await sleep1()
-
-                const block = await providerConfig.provider.getBlock()
-                console.log(`---- fetched block: ${block.number}`)
+                // race promises: complete providedr poll promise within PING_TIMEOUT seconds or reject/throw
+                await Promise.race([
+                    providerConfig.provider.getBlockNumber(),
+                    new Promise((resolve, reject) => {
+                        setTimeout(() => {
+                            reject('Ping timeout')
+                        }, PING_TIMEOUT * 1000)
+                    })
+                ])
 
                 // recovery phase
                 if (providerConfig.rating < defaultRating) {
-                    console.log(`------- SUCCESS: ${providerConfig.url}`)
+                    console.log(`------- PING SUCCESS: ${providerConfig.url}`)
 
-                    const successesUpdated = await redisEval(REDIS_CMD, 1, REDIS_SUCCESS_KEY, (MIN_SUCCESSES + 1) * PING_INTERVAL)
-    
+                    const successesUpdated = await redisEval(REDIS_CMD, 1, REDIS_SUCCESS_KEY, MIN_SUCCESSES * PING_INTERVAL)
                     if (successesUpdated >= MIN_SUCCESSES) {
                         console.log(`------- RESTORING PROVIDER RATING: ${providerConfig.url}`)
 
@@ -174,18 +178,17 @@ class ProviderStore {
                     }
                 }
             } catch(error) {
-                console.log(`------- FAILED: ${providerConfig.url} --- ${error}`)
+                console.log(`------- PING FAILED: ${providerConfig.url} --- ${error}`)
 
                 const failsUpdated = await redisEval(REDIS_CMD, 1, REDIS_FAIL_KEY, (fails + 1) * PING_INTERVAL * 3)
-
                 if (failsUpdated >= MAX_FAILS ) {
                     console.log(`------- MAX FAILS, LOWERING PROVIDER RATING: ${providerConfig.url}`)
 
                     this.lowerProviderRating(network, providerConfig.provider)
                 }
             } finally {
+                console.log(`---- PING FINISHED --- time taken: ${(new Date()).getTime() - pingStarted}`)
                 pingInProgress = false
-                console.log(`---- SET - PING FINISHED --- time taken: ${(new Date()).getTime() - pingStarted}`)
             }
         }, PING_INTERVAL * 1000)
     }
