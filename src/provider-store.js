@@ -84,18 +84,24 @@ class ProviderStore {
                     this.byNetwork[network].filter(config => config.url == providerUrl)[0].rating = ratingValue
                 })
 
-                provider.on('block', async (blockNum) => {
-                    providerConfig.lastBlockTimestamp = (new Date()).getTime()
-
-                    if (blockNum <= this.byNetworkLatestBlock[network]) return
-
-                    this.byNetworkLatestBlock[network] = blockNum
-                    provider.emit('latest-block', blockNum)
-                })
+                this.setupProvider(network, provider)
 
                 this.startProviderPinger(network, providerUrl)
             }
         }
+    }
+
+    setupProvider(network, provider) {
+        const providerConfig = this.getProviderConfig(network, provider)
+
+        provider.on('block', async (blockNum) => {
+            providerConfig.lastBlockTimestamp = (new Date()).getTime()
+
+            if (blockNum <= this.byNetworkLatestBlock[network]) return
+
+            this.byNetworkLatestBlock[network] = blockNum
+            provider.emit('latest-block', blockNum)
+        })
     }
 
     // mechanism for poll/ping of provider when not responding
@@ -203,16 +209,30 @@ class ProviderStore {
 
         if (provider && provider._websocket && provider._websocket.on) {
             provider._websocket.on('error', function (e) {
-            console.error(`[${new Date().toLocaleString()}] provider RPC "[${providerUrl}]" return socket error`, e)
+                console.error(`[${new Date().toLocaleString()}] provider RPC "[${providerUrl}]" return socket error`, e)
+            })
+
+            provider._websocket.on('close', () => {
+                setTimeout(() => {
+                    this.reconnect(network, provider)
+                }, 1000)
             })
         }
 
         return provider
     }
 
+    reconnect(network, provider) {
+        const providerConfig = this.getProviderConfig(network, provider)
+
+        providerConfig.provider = this.connect(providerConfig.url, network, providerConfig.chainId)
+        this.setupProvider(network, provider)
+        console.log(`---------- RECONNECTED TO ${providerConfig.url}`)
+    }
+
     reconnectAllByNetwork(network) {
-        this.byNetwork[network].map((info, index) => {
-            this.byNetwork[network][index].provider = this.connect(info.url, network, info.chainId)
+        this.byNetwork[network].map(providerConfig => {
+            this.reconnect(network, providerConfig.provider)
         })
     }
 
@@ -305,6 +325,12 @@ class ProviderStore {
 
         providerConfig.rating = defaultRating
         redisSet(getRatingKey(networkName, providerConfig.url), providerConfig.rating)
+    }
+
+    getProviderConfig(networkName, provider) {
+        const providerConfig = this.byNetwork[networkName].filter(providerConfig => providerConfig.url == provider.connection.url)[0]
+        if (!providerConfig) throw new Error(`Bad network or provider url: ${networkName}, ${provider.connection.url}`)
+        return providerConfig
     }
 }
 
