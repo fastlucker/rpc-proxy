@@ -1,11 +1,11 @@
+const { printLog } = require('./utils/debug-helper')
 const { StaticJsonRpcProvider } = require('ethers').providers
 const { MyWebSocketProvider } = require('./providers/websocket-provider')
-
 const redis = require("redis")
-const { promisify } = require('util');
+const { promisify } = require('util')
 
 const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
-const redisClient = redis.createClient(redisUrl);
+const redisClient = redis.createClient(redisUrl)
 
 const redisGet = promisify(redisClient.get).bind(redisClient)
 const redisSet = promisify(redisClient.set).bind(redisClient)
@@ -47,7 +47,7 @@ class ProviderStore {
      */
     constructor(_providersConfig, _connectionParams = {}, _providerPickAlgorithm = 'primary') {
         // override default params if provided as input
-        this.connectionParams = Object.assign(defaultConnectionParams, _connectionParams);
+        this.connectionParams = Object.assign(defaultConnectionParams, _connectionParams)
         this.providerPickAlgorithm = _providerPickAlgorithm
 
         for (const network in _providersConfig) {
@@ -118,38 +118,39 @@ class ProviderStore {
         const MAX_INTER_BLOCK_INTERVAL = 30 // seconds
 
         let pingInProgress = false
+        const pingerLogPrefix = `[PINGER] [${network}] [${providerUrl}]`
 
         setInterval(async () => {
             const providerConfig = this.getProviderConfig(network, provider)
-            console.log(`--- Provider rating: ${providerConfig.rating} (${providerConfig.url}) --- last block time: ${providerConfig.lastBlockTimestamp}`)
+            printLog(`${pingerLogPrefix} rating: ${providerConfig.rating} | last block timestamp: ${providerConfig.lastBlockTimestamp} (${(new Date()).getTime() - providerConfig.lastBlockTimestamp}ms ago)`)
 
             // all good, no need to ping yet
             if (
                 providerConfig.rating >= defaultRating
                 && (new Date()).getTime() - providerConfig.lastBlockTimestamp < MAX_INTER_BLOCK_INTERVAL * 1000
             ) {
-                console.log(`---- All good, no need to ping yet: ${providerConfig.url}`)
+                printLog(`${pingerLogPrefix} all good, no need to ping yet`)
                 return
             }
 
-            console.log(`---- Recent fail or no block for 30secs - initiating ping: ${providerConfig.url}`)
+            printLog(`${pingerLogPrefix} recent fail or no block for ${MAX_INTER_BLOCK_INTERVAL} seconds: initiating ping`)
 
             const failKeyValue = await redisGet(REDIS_FAIL_KEY)
             const fails = parseInt(failKeyValue ?? 0)
 
             if (pingInProgress) {
-                console.log(`---- PING IN PROGRESS, SKIPPING PING: ${providerUrl}`)
+                printLog(`${pingerLogPrefix} ping in progress, waiting`)
                 return
             }
 
             if (fails >= MAX_FAILS) {
-                console.log(`---- SOON REACHED MAX FAILS, WAITING: ${providerUrl}`)
+                printLog(`${pingerLogPrefix} max fails reached soon, waiting`)
                 return
             }
 
             const pingStarted = (new Date()).getTime()
             pingInProgress = true
-            console.log(`---- INITIATING PING: ${providerUrl}`)
+            printLog(`${pingerLogPrefix} ping started`)
 
             try {
                 // race promises: complete providedr poll promise within PING_TIMEOUT seconds or reject/throw
@@ -162,28 +163,25 @@ class ProviderStore {
                     })
                 ])
 
+                printLog(`${pingerLogPrefix} ping successful`)
+
                 // recovery phase
                 if (providerConfig.rating < defaultRating) {
-                    console.log(`------- PING SUCCESS: ${providerConfig.url}`)
-
                     const successesUpdated = await redisEval(REDIS_CMD, 1, REDIS_SUCCESS_KEY, MIN_SUCCESSES * PING_INTERVAL)
                     if (successesUpdated >= MIN_SUCCESSES) {
-                        console.log(`------- RESTORING PROVIDER RATING: ${providerConfig.url}`)
-
+                        printLog(`${pingerLogPrefix} recovered: restoring rating`, true)
                         this.resetProviderRating(network, providerConfig.provider)
                     }
                 }
             } catch(error) {
-                console.log(`------- PING FAILED: ${providerConfig.url} --- ${error}`)
-
+                printLog(`${pingerLogPrefix} ping failed | error: ${error}`)
                 const failsUpdated = await redisEval(REDIS_CMD, 1, REDIS_FAIL_KEY, (fails + 1) * PING_INTERVAL * 3)
                 if (failsUpdated >= MAX_FAILS ) {
-                    console.log(`------- MAX FAILS, LOWERING PROVIDER RATING: ${providerConfig.url}`)
-
+                    printLog(`${pingerLogPrefix} max fails reached: lowering rating`, providerConfig.rating == defaultRating)
                     this.lowerProviderRating(network, providerConfig.provider)
                 }
             } finally {
-                console.log(`---- PING FINISHED --- time taken: ${(new Date()).getTime() - pingStarted}`)
+                printLog(`${pingerLogPrefix} ping finished | time taken: ${(new Date()).getTime() - pingStarted} ms`)
                 pingInProgress = false
             }
         }, PING_INTERVAL * 1000)
@@ -226,7 +224,7 @@ class ProviderStore {
 
         providerConfig.provider = this.connect(providerConfig.url, network, providerConfig.chainId)
         this.setupProvider(network, providerConfig.provider)
-        console.log(`---------- RECONNECTED TO ${providerConfig.url}`)
+        printLog(`[${network}] [${providerConfig.url}] reconnected`, true)
     }
 
     reconnectAllByNetwork(network) {

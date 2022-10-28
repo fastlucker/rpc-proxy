@@ -1,5 +1,6 @@
 const { Logger } = require('@ethersproject/logger')
 const rpcCallLogger = require('./utils/rpc-call-logger')
+const { printLog } = require('./utils/debug-helper')
 
 const defaultMaxFailsPerCall = 2
 
@@ -17,8 +18,8 @@ class ProxyBuilder {
             get: (target, prop, receiver) => {
 
                 if (prop == 'restart') {
-                    console.log(`[${networkName}] - [${new Date().toLocaleString()}] - RPCs  restarted`)
-    
+                    printLog(`[${networkName}] Restarting all RPC providers...`, true)
+
                     // restart all the providers in the network
                     this.providerStore.reconnectAllByNetwork(networkName)
                     return
@@ -54,6 +55,7 @@ class ProxyBuilder {
         }
 
         const provider = this.providerStore.chooseProvider(networkName, prop, args[0])
+        printLog(`[${networkName}] [${provider.connection.url}] called function: ${prop}`)
 
         let result
 
@@ -82,7 +84,7 @@ class ProxyBuilder {
             return result
 
         } catch (e) {
-            providerFails = this.handleProviderFail(e, networkName, provider, providerFails)
+            providerFails = this.handleProviderFail(e, networkName, provider, prop, providerFails)
             return this.handleTypeFunction(networkName, prop, args, providerFails)
         }
     }
@@ -90,6 +92,7 @@ class ProxyBuilder {
     // get property handler
     handleTypePropGet(networkName, prop, args, providerFails = 0) {
         const provider = this.providerStore.chooseProvider(networkName, prop, args[0])
+        printLog(`[${networkName}] [${provider.connection.url}] accessed property: ${prop}`)
 
         let result
 
@@ -98,7 +101,7 @@ class ProxyBuilder {
             rpcCallLogger.logCall(provider, prop, args, false, result)
             return result
         } catch (e) {
-            providerFails = this.handleProviderFail(e, networkName, provider, providerFails)
+            providerFails = this.handleProviderFail(e, networkName, provider, prop, providerFails)
             return this.handleTypePropGet(networkName, prop, args, providerFails)
         }
     }
@@ -119,7 +122,9 @@ class ProxyBuilder {
         }
     }
 
-    handleProviderFail(e, networkName, provider, providerFails) {
+    handleProviderFail(e, networkName, provider, prop, providerFails) {
+        printLog(`[${networkName}] [${provider.connection.url}] failed call: ${prop}`)
+
         this.providerStore.lowerProviderRating(networkName, provider)
         providerFails++
 

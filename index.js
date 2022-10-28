@@ -1,6 +1,7 @@
 const { ProviderStore } = require('./src/provider-store')
 const { ProxyBuilder } = require('./src/proxy-builder')
 const dnsCache = require('./src/utils/dns-cache')
+const { setDebug } = require('./src/utils/debug-helper')
 
 let providerStore
 let proxyBuilder
@@ -35,13 +36,16 @@ let proxyBuilder
  *          maxFailsPerCall: 2
  *      }
  */
-function init (providersConfig, options = { 
+function init (providersConfig, options = {
     connectionParams: {},
     providerPickAlgorithm: 'primary',
     dnsCacheEnabled: true, 
     dnsCacheTTL: null,
-    maxFailsPerCall: null
+    maxFailsPerCall: null,
+    debug: false
 }) {
+    setDebug(options.debug)
+
     // enable DNS lookup caching for RPC provider hostnames
     if (options.dnsCacheEnabled) dnsCache.init(providersConfig, options.dnsCacheTTL)
 
