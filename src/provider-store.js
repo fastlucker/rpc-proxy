@@ -11,14 +11,26 @@ const redisGet = promisify(redisClient.get).bind(redisClient)
 const redisSet = promisify(redisClient.set).bind(redisClient)
 const redisEval = promisify(redisClient.eval).bind(redisClient)
 
-const defaultRating = 100
-const defaultConnectionParams = {timeout: 30000, throttleLimit: 2, throttleSlotInterval: 10}
+// redis cmd to increase counter and update its expire timeout
+const REDIS_EVAL_CMD = "redis.call('incr',KEYS[1]); redis.call('EXPIRE',KEYS[1],ARGV[1]); return redis.call('GET', KEYS[1])"
+
+const DEFAULT_RATING = 100
+const DEFAULT_CONNECTION_PARAMS = {timeout: 30000, throttleLimit: 2, throttleSlotInterval: 10}
+
+const DEFAULT_PINGER_PARAMS = {
+    interval: 10,
+    timeout: 10,
+    maxFails: 3,
+    minSuccesses: 5,
+    maxInterBlockInterval: 30
+}
 
 class ProviderStore {
     byNetwork = {}
     byNetworkLastUsedProviderUrl = {}
     byNetworkLatestBlock = {}
     connectionParams = {}
+    pingerParams = {}
     providerPickAlgorithm = null
 
     /**
@@ -42,12 +54,21 @@ class ProviderStore {
      *          throttleLimit: 2,
      *          throttleSlotInterval: 10
      *      }
+     * @param {Object} _pingerParams - Pinger parameters (optional):
+     *      {
+ *              interval: 10,                   // seconds
+ *              timeout: 10,                    // seconds
+ *              maxFails: 3,                    // max consecutive fails to consider an RPC down
+ *              minSuccesses: 5,                // min consecutive successes to consider an RPC back up
+ *              maxInterBlockInterval: 30       // seconds (max interval between new block events, used to detect stuck/failed RPC)
+ *          }
      * @param {string} _providerPickAlgorithm - Algorithm for picking provider for next request (possible: primary | round-robin)
      * 
      */
-    constructor(_providersConfig, _connectionParams = {}, _providerPickAlgorithm = 'primary') {
+    constructor(_providersConfig, _connectionParams = {}, _pingerParams = {}, _providerPickAlgorithm = 'primary') {
         // override default params if provided as input
-        this.connectionParams = Object.assign(defaultConnectionParams, _connectionParams)
+        this.connectionParams = Object.assign(DEFAULT_CONNECTION_PARAMS, _connectionParams)
+        this.pingerParams = Object.assign(DEFAULT_PINGER_PARAMS, _pingerParams)
         this.providerPickAlgorithm = _providerPickAlgorithm
 
         for (const network in _providersConfig) {
@@ -67,7 +88,7 @@ class ProviderStore {
                     primary: providerInfo['primary'] ?? false,
                     tags: providerInfo['tags'] ?? [],
                     chainId: chainId,
-                    rating: defaultRating,
+                    rating: DEFAULT_RATING,
                     lastBlockTimestamp: (new Date()).getTime()
                 }
 
@@ -104,21 +125,11 @@ class ProviderStore {
     startProviderPinger(network, provider) {
         const providerUrl = provider.connection.url
 
-        // redis cmd to increase counter and update its expire timeout
-        const REDIS_CMD = "redis.call('incr',KEYS[1]); redis.call('EXPIRE',KEYS[1],ARGV[1]); return redis.call('GET', KEYS[1])"
-
         const REDIS_FAIL_KEY = `fail:${network}:${providerUrl}`
         const REDIS_SUCCESS_KEY = `success:${network}:${providerUrl}`
-        const PING_INTERVAL = 10    // seconds
-        const PING_TIMEOUT = 10     // seconds
-        const MAX_FAILS = 3
-        const MIN_SUCCESSES = 5
 
-        // max interval between blocks
-        const MAX_INTER_BLOCK_INTERVAL = 30 // seconds
-
-        let pingInProgress = false
         const pingerLogPrefix = `[PINGER] [${network}] [${providerUrl}]`
+        let pingInProgress = false
 
         setInterval(async () => {
             const providerConfig = this.getProviderConfig(network, provider)
@@ -126,14 +137,14 @@ class ProviderStore {
 
             // all good, no need to ping yet
             if (
-                providerConfig.rating >= defaultRating
-                && (new Date()).getTime() - providerConfig.lastBlockTimestamp < MAX_INTER_BLOCK_INTERVAL * 1000
+                providerConfig.rating >= DEFAULT_RATING
+                && (new Date()).getTime() - providerConfig.lastBlockTimestamp < this.pingerParams.maxInterBlockInterval * 1000
             ) {
                 printLog(`${pingerLogPrefix} all good, no need to ping yet`)
                 return
             }
 
-            printLog(`${pingerLogPrefix} recent fail or no block for ${MAX_INTER_BLOCK_INTERVAL} seconds: initiating ping`)
+            printLog(`${pingerLogPrefix} recent fail or no block for ${this.pingerParams.maxInterBlockInterval} seconds: initiating ping`)
 
             const failKeyValue = await redisGet(REDIS_FAIL_KEY)
             const fails = parseInt(failKeyValue ?? 0)
@@ -143,7 +154,7 @@ class ProviderStore {
                 return
             }
 
-            if (fails >= MAX_FAILS) {
+            if (fails >= this.pingerParams.maxFails) {
                 printLog(`${pingerLogPrefix} max fails reached soon, waiting`)
                 return
             }
@@ -153,38 +164,38 @@ class ProviderStore {
             printLog(`${pingerLogPrefix} ping started`)
 
             try {
-                // race promises: complete providedr poll promise within PING_TIMEOUT seconds or reject/throw
+                // race promises: complete providedr poll promise within {pingerParams.timeout} seconds or reject/throw
                 await Promise.race([
                     providerConfig.provider.getBlockNumber(),
                     new Promise((resolve, reject) => {
                         setTimeout(() => {
                             reject('Ping timeout')
-                        }, PING_TIMEOUT * 1000)
+                        }, this.pingerParams.timeout * 1000)
                     })
                 ])
 
                 printLog(`${pingerLogPrefix} ping successful`)
 
                 // recovery phase
-                if (providerConfig.rating < defaultRating) {
-                    const successesUpdated = await redisEval(REDIS_CMD, 1, REDIS_SUCCESS_KEY, MIN_SUCCESSES * PING_INTERVAL)
-                    if (successesUpdated >= MIN_SUCCESSES) {
+                if (providerConfig.rating < DEFAULT_RATING) {
+                    const successesUpdated = await redisEval(REDIS_EVAL_CMD, 1, REDIS_SUCCESS_KEY, this.pingerParams.minSuccesses * this.pingerParams.interval)
+                    if (successesUpdated >= this.pingerParams.minSuccesses) {
                         printLog(`${pingerLogPrefix} recovered: restoring rating`, true)
                         this.resetProviderRating(network, providerConfig.provider)
                     }
                 }
             } catch(error) {
                 printLog(`${pingerLogPrefix} ping failed | error: ${error}`)
-                const failsUpdated = await redisEval(REDIS_CMD, 1, REDIS_FAIL_KEY, (fails + 1) * PING_INTERVAL * 3)
-                if (failsUpdated >= MAX_FAILS ) {
-                    printLog(`${pingerLogPrefix} max fails reached: lowering rating`, providerConfig.rating == defaultRating)
+                const failsUpdated = await redisEval(REDIS_EVAL_CMD, 1, REDIS_FAIL_KEY, (fails + 1) * this.pingerParams.interval * 3)
+                if (failsUpdated >= this.pingerParams.maxFails ) {
+                    printLog(`${pingerLogPrefix} max fails reached: lowering rating`, providerConfig.rating == DEFAULT_RATING)
                     this.lowerProviderRating(network, providerConfig.provider)
                 }
             } finally {
                 printLog(`${pingerLogPrefix} ping finished | time taken: ${(new Date()).getTime() - pingStarted} ms`)
                 pingInProgress = false
             }
-        }, PING_INTERVAL * 1000)
+        }, this.pingerParams.interval * 1000)
     }
 
     isInitialized() {
@@ -306,7 +317,7 @@ class ProviderStore {
     resetProviderRating(networkName, provider) {
         const providerConfig = this.getProviderConfig(networkName, provider)
 
-        providerConfig.rating = defaultRating
+        providerConfig.rating = DEFAULT_RATING
         redisSet(getRatingKey(networkName, providerConfig.url), providerConfig.rating)
     }
 

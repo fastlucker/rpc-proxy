@@ -30,14 +30,23 @@ let proxyBuilder
  *              throttleLimit: 2,
  *              throttleSlotInterval: 10
  *          },
+ *          pingerParams: {
+ *              interval: 10,                   // seconds
+ *              timeout: 10,                    // seconds
+ *              maxFails: 3,                    // max consecutive fails to consider an RPC down
+ *              minSuccesses: 5,                // min consecutive successes to consider an RPC back up
+ *              maxInterBlockInterval: 30       // seconds (used to detect stuck/failed RPC)
+ *          }
  *          providerPickAlgorithm: 'primary'    // primary | round-robin
  *          dnsCacheEnabled: true
  *          dnsCacheTTL: 7200,                  // seconds
  *          maxFailsPerCall: 2
+ *          debug: false,                       // enable/disable more verbose debug logs
  *      }
  */
 function init (providersConfig, options = {
     connectionParams: {},
+    pingerParams: {},
     providerPickAlgorithm: 'primary',
     dnsCacheEnabled: true, 
     dnsCacheTTL: null,
@@ -49,7 +58,7 @@ function init (providersConfig, options = {
     // enable DNS lookup caching for RPC provider hostnames
     if (options.dnsCacheEnabled) dnsCache.init(providersConfig, options.dnsCacheTTL)
 
-    providerStore = new ProviderStore(providersConfig, options.connectionParams, options.providerPickAlgorithm)
+    providerStore = new ProviderStore(providersConfig, options.connectionParams, options.pingerParams, options.providerPickAlgorithm)
     proxyBuilder = new ProxyBuilder(providerStore, options.maxFailsPerCall)
 }
 
