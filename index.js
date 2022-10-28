@@ -29,7 +29,6 @@ let proxyBuilder
  *              throttleLimit: 2,
  *              throttleSlotInterval: 10
  *          },
- *          lowRatingExpiry: 300,               // seconds
  *          providerPickAlgorithm: 'primary'    // primary | round-robin
  *          dnsCacheEnabled: true
  *          dnsCacheTTL: 7200,                  // seconds
@@ -38,7 +37,6 @@ let proxyBuilder
  */
 function init (providersConfig, options = { 
     connectionParams: {},
-    lowRatingExpiry: null,
     providerPickAlgorithm: 'primary',
     dnsCacheEnabled: true, 
     dnsCacheTTL: null,
@@ -47,7 +45,7 @@ function init (providersConfig, options = {
     // enable DNS lookup caching for RPC provider hostnames
     if (options.dnsCacheEnabled) dnsCache.init(providersConfig, options.dnsCacheTTL)
 
-    providerStore = new ProviderStore(providersConfig, options.connectionParams, options.lowRatingExpiry, options.providerPickAlgorithm)
+    providerStore = new ProviderStore(providersConfig, options.connectionParams, options.providerPickAlgorithm)
     proxyBuilder = new ProxyBuilder(providerStore, options.maxFailsPerCall)
 }
 

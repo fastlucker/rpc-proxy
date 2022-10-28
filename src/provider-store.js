@@ -12,15 +12,13 @@ const redisSet = promisify(redisClient.set).bind(redisClient)
 const redisEval = promisify(redisClient.eval).bind(redisClient)
 
 const defaultRating = 100
-const defaultConnectionParams = {timeout: 10000, throttleLimit: 2, throttleSlotInterval: 10}
-const defaultLowRatingExpiry = 60 * 5 // seconds
+const defaultConnectionParams = {timeout: 30000, throttleLimit: 2, throttleSlotInterval: 10}
 
 class ProviderStore {
     byNetwork = {}
     byNetworkLastUsedProviderUrl = {}
     byNetworkLatestBlock = {}
     connectionParams = {}
-    lowRatingExpiry = null
     providerPickAlgorithm = null
 
     /**
@@ -44,14 +42,12 @@ class ProviderStore {
      *          throttleLimit: 2,
      *          throttleSlotInterval: 10
      *      }
-     * @param {number} _lowRatingExpiry - Low-rating keys expiry time (in seconds) in Redis
      * @param {string} _providerPickAlgorithm - Algorithm for picking provider for next request (possible: primary | round-robin)
      * 
      */
-    constructor(_providersConfig, _connectionParams = {}, _lowRatingExpiry = null, _providerPickAlgorithm = 'primary') {
+    constructor(_providersConfig, _connectionParams = {}, _providerPickAlgorithm = 'primary') {
         // override default params if provided as input
         this.connectionParams = Object.assign(defaultConnectionParams, _connectionParams);
-        this.lowRatingExpiry = _lowRatingExpiry === null ? defaultLowRatingExpiry : parseInt(_lowRatingExpiry)
         this.providerPickAlgorithm = _providerPickAlgorithm
 
         for (const network in _providersConfig) {
