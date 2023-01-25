@@ -53,9 +53,10 @@ function init (providersConfig, options = {
     dnsCacheEnabled: true,
     dnsCacheTTL: null,
     maxFailsPerCall: null,
-    debug: false
+    debug: false,
+    silent: false
 }) {
-    setDebug(options.debug)
+    setDebug(options.debug, options.silent)
 
     // enable DNS lookup caching for RPC provider hostnames
     if (options.dnsCacheEnabled) dnsCache.init(providersConfig, options.dnsCacheTTL)

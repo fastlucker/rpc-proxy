@@ -1,11 +1,13 @@
 let debug = false
+let isSilent = false
 
-function setDebug(value) {
+function setDebug(value, silent) {
     debug = value
+    isSilent = silent
 }
 
 function printLog(message = '', force = false) {
-    if (!(force || debug)) return
+    if (isSilent || !(force || debug)) return
 
     console.log(`[RPC Proxy] [${new Date().toLocaleString()}] ${message}`)
 }
