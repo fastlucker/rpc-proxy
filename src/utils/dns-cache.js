@@ -5,7 +5,7 @@ const { URL } = require('url')
 const CacheableLookup = require('cacheable-lookup');
 
 // in seconds
-const defaultCacheTTL = 60 * 60 * 2 
+const defaultCacheTTL = 60 * 60 * 2
 
 class MyCacheableLookup extends CacheableLookup {
     constructor(options = {}, cacheableHostnames = []) {

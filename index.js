@@ -44,11 +44,13 @@ let proxyBuilder
  *          debug: false,                       // enable/disable more verbose debug logs
  *      }
  */
+
 function init (providersConfig, options = {
     connectionParams: {},
     pingerParams: {},
     providerPickAlgorithm: 'primary',
-    dnsCacheEnabled: true, 
+    lowRatingExpiry: null,
+    dnsCacheEnabled: true,
     dnsCacheTTL: null,
     maxFailsPerCall: null,
     debug: false

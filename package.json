@@ -1,5 +1,5 @@
 {
-  "name": "relayer-custom-rpc",
+  "name": "rpc-proxy",
   "version": "0.7.5",
   "description": "A custom RPC distributor for the relayer",
   "main": "index.js",
@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AmbireTech/custom-rpc.git"
+    "url": "git+https://github.com/AmbireTech/rpc-proxy.git"
   },
   "keywords": [
     "RPC",
@@ -17,9 +17,9 @@
   "author": "Ambire",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/AmbireTech/custom-rpc/issues"
+    "url": "https://github.com/AmbireTech/rpc-proxy/issues"
   },
-  "homepage": "https://github.com/AmbireTech/custom-rpc#readme",
+  "homepage": "https://github.com/AmbireTech/rpc-proxy#readme",
   "dependencies": {
     "cacheable-lookup": "^6.1.0",
     "ethers": "^5.5.2",
